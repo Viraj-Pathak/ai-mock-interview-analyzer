@@ -13,8 +13,12 @@ import nltk
 
 # ── NLTK setup (works on Vercel serverless via /tmp) ─────────────────────────
 NLTK_DATA = os.environ.get('NLTK_DATA', '/tmp/nltk_data')
+os.makedirs(NLTK_DATA, exist_ok=True)
 nltk.data.path.insert(0, NLTK_DATA)
-nltk.download('vader_lexicon', download_dir=NLTK_DATA, quiet=True)
+try:
+    nltk.download('vader_lexicon', download_dir=NLTK_DATA, quiet=True)
+except Exception:
+    pass
 
 from analyzer import analyze_all_answers
 
@@ -71,7 +75,10 @@ class Interview(db.Model):
 
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+    except Exception as e:
+        print(f"DB init error: {e}")
 
 
 # ── Questions bank (role → level → questions) ─────────────────────────────────
