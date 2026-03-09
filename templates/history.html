@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}History — InterviewAI{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="page-header">
+        <h2>Interview History</h2>
+        <a href="{{ url_for('dashboard') }}"><button class="btn-primary">New Interview</button></a>
+    </div>
+
+    {% if records.items %}
+
+    <div class="history-list">
+        {% for record in records.items %}
+        <div class="history-card">
+            <div class="history-card-left">
+                <div class="history-role">{{ record.role }}</div>
+                {% if record.level %}
+                <span class="level-badge level-{{ record.level }} level-badge-sm">
+                    {{ {'fresher':'🌱','mid':'⚡','senior':'🏆'}[record.level] }} {{ {'fresher':'Fresher','mid':'Mid-Level','senior':'Senior'}[record.level] }}
+                </span>
+                {% endif %}
+                <div class="history-date">{{ record.date.strftime('%b %d, %Y') }}</div>
+            </div>
+
+            <div class="history-scores">
+                <div class="h-score-item">
+                    <span class="h-score-label">Relevance</span>
+                    <span class="h-score-val">{{ record.relevance }}%</span>
+                </div>
+                <div class="h-score-item">
+                    <span class="h-score-label">Confidence</span>
+                    <span class="h-score-val">{{ record.confidence }}%</span>
+                </div>
+                <div class="h-score-item">
+                    <span class="h-score-label">Overall</span>
+                    <span class="h-score-val {{ 'good' if record.overall >= 75 else ('ok' if record.overall >= 50 else 'low') }}">
+                        {{ record.overall }}%
+                    </span>
+                </div>
+            </div>
+
+            <div class="history-card-right">
+                <a href="{{ url_for('result', interview_id=record.id) }}">
+                    <button class="btn-outline-sm">View</button>
+                </a>
+                <form method="POST"
+                      action="{{ url_for('delete_interview', interview_id=record.id) }}"
+                      onsubmit="return confirm('Delete this record?')">
+                    <button type="submit" class="btn-danger-sm">Delete</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if records.pages > 1 %}
+    <div class="pagination">
+        {% if records.has_prev %}
+        <a href="{{ url_for('history', page=records.prev_num) }}" class="page-btn">&laquo; Prev</a>
+        {% endif %}
+        {% for p in records.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+            <a href="{{ url_for('history', page=p) }}"
+               class="page-btn {% if p == records.page %}active{% endif %}">{{ p }}</a>
+            {% else %}
+            <span class="page-ellipsis">&hellip;</span>
+            {% endif %}
+        {% endfor %}
+        {% if records.has_next %}
+        <a href="{{ url_for('history', page=records.next_num) }}" class="page-btn">Next &raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h3>No interviews yet</h3>
+        <p>Start your first mock interview to see your results here.</p>
+        <a href="{{ url_for('dashboard') }}"><button class="btn-primary">Start Now</button></a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

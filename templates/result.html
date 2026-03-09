@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Your Results — InterviewAI{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="result-header">
+        <h2>Interview Report</h2>
+        <p class="result-role">{{ record.role }}</p>
+        {% if record.level %}
+        <span class="level-badge level-{{ record.level }}">
+            {{ level_info.icon }} {{ level_info.label }} &middot; {{ level_info.years }}
+        </span>
+        {% endif %}
+        <p class="result-date">{{ record.date.strftime('%B %d, %Y') }}</p>
+    </div>
+
+    <!-- Overall score banner -->
+    {% set grade = 'score-great' if record.overall >= 75 else ('score-ok' if record.overall >= 50 else 'score-low') %}
+    {% set label = 'Excellent' if record.overall >= 75 else ('Good' if record.overall >= 50 else 'Needs Work') %}
+    <div class="score-banner {{ grade }}">
+        <div class="score-big">{{ record.overall }}%</div>
+        <div class="score-label">Overall Score</div>
+        <div class="score-badge">{{ label }}</div>
+    </div>
+
+    <!-- Score breakdown cards — dynamic widths set by JS via data-pct -->
+    <div class="score-grid">
+        <div class="score-card">
+            <div class="score-label">Relevance</div>
+            {% set rv = record.relevance %}
+            <div class="score-value {{ 'good' if rv >= 70 else ('ok' if rv >= 45 else 'low') }}">{{ rv }}%</div>
+            <div class="score-bar"><div class="score-bar-fill" data-pct="{{ rv }}"></div></div>
+        </div>
+        <div class="score-card">
+            <div class="score-label">Confidence</div>
+            {% set cf = record.confidence %}
+            <div class="score-value {{ 'good' if cf >= 70 else ('ok' if cf >= 45 else 'low') }}">{{ cf }}%</div>
+            <div class="score-bar"><div class="score-bar-fill" data-pct="{{ cf }}"></div></div>
+        </div>
+        <div class="score-card">
+            <div class="score-label">Clarity</div>
+            {% set cl = record.clarity or 0 %}
+            <div class="score-value {{ 'good' if cl >= 70 else ('ok' if cl >= 45 else 'low') }}">{{ cl }}%</div>
+            <div class="score-bar"><div class="score-bar-fill" data-pct="{{ cl }}"></div></div>
+        </div>
+        <div class="score-card">
+            <div class="score-label">Cheating Penalty</div>
+            {% set cp = record.cheating %}
+            <div class="score-value {{ 'good' if cp == 0 else ('ok' if cp <= 15 else 'low') }}">-{{ cp }}%</div>
+            {% if record.word_count %}
+            <p class="score-meta">{{ record.word_count }} words &middot; {{ record.filler_count or 0 }} fillers</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Radar chart — scores embedded as JSON in data attribute -->
+    {% if record.clarity %}
+    <div class="card chart-card">
+        <h3>Performance Radar</h3>
+        <canvas id="radarChart" width="300" height="300"
+            data-scores='[{{ record.relevance }}, {{ record.confidence }}, {{ record.clarity }}, {{ record.overall }}]'>
+        </canvas>
+    </div>
+    {% endif %}
+
+    <!-- Per-question breakdown -->
+    {% if per_question %}
+    <h3 class="section-title">Question Breakdown</h3>
+    {% for q in per_question %}
+    <div class="card q-result-card">
+        <div class="q-result-header">
+            <span class="q-number">Q{{ loop.index }}</span>
+            <span class="q-text">{{ questions[loop.index0] if loop.index0 < questions|length else '' }}</span>
+            <span class="q-final-score {{ 'good' if q.final_score >= 70 else ('ok' if q.final_score >= 45 else 'low') }}">
+                {{ q.final_score }}%
+            </span>
+        </div>
+        <div class="q-scores-row">
+            <span class="q-badge">Relevance: {{ q.relevance_score }}%</span>
+            <span class="q-badge">Confidence: {{ q.confidence_score }}%</span>
+            <span class="q-badge">{{ q.word_count }} words</span>
+            {% if q.filler_count > 0 %}
+            <span class="q-badge warn">{{ q.filler_count }} fillers</span>
+            {% endif %}
+        </div>
+        {% for fb in q.feedback %}
+        <p class="q-feedback">{% if 'Excellent' in fb %}✅{% else %}💡{% endif %} {{ fb }}</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- General feedback -->
+    {% if feedback %}
+    <div class="card feedback-card">
+        <h3>Key Takeaways</h3>
+        <ul class="feedback-list">
+            {% for fb in feedback %}
+            <li>{{ fb }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="result-actions">
+        <a href="{{ url_for('dashboard') }}">
+            <button class="btn-primary">Try Another Role</button>
+        </a>
+        <a href="{{ url_for('history') }}">
+            <button class="btn-outline">View History</button>
+        </a>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Animate score bar fills from data-pct attributes
+document.querySelectorAll('.score-bar-fill[data-pct]').forEach(el => {
+    const pct = Math.min(parseFloat(el.dataset.pct) || 0, 100);
+    requestAnimationFrame(() => { el.style.width = pct + '%'; });
+});
+
+// Radar chart
+const canvas = document.getElementById('radarChart');
+if (canvas) {
+    const scores = JSON.parse(canvas.dataset.scores);
+    new Chart(canvas.getContext('2d'), {
+        type: 'radar',
+        data: {
+            labels: ['Relevance', 'Confidence', 'Clarity', 'Overall'],
+            datasets: [{
+                label: 'Your Scores',
+                data: scores,
+                backgroundColor: 'rgba(56,189,248,0.2)',
+                borderColor: 'rgba(56,189,248,1)',
+                borderWidth: 2,
+                pointBackgroundColor: 'rgba(56,189,248,1)',
+            }]
+        },
+        options: {
+            scales: {
+                r: {
+                    min: 0, max: 100,
+                    ticks: { color: '#94a3b8', stepSize: 25 },
+                    grid: { color: '#334155' },
+                    pointLabels: { color: '#e2e8f0', font: { size: 13 } }
+                }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+</script>
+{% endblock %}

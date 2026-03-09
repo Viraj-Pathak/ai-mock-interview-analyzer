@@ -1,0 +1,29 @@
+# Environment
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+env/
+
+# Database (SQLite local dev only — never commit)
+instance/
+*.db
+
+# NLTK data
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Login — InterviewAI{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="auth-logo-mark">P</div>
+            <h1>PrepIQ</h1>
+            <p>AI-powered mock interviews for STEM careers.</p>
+        </div>
+
+        <div class="tab-group">
+            <button class="tab-btn {% if tab == 'login' %}active{% endif %}"
+                    onclick="switchTab('login')">Log In</button>
+            <button class="tab-btn {% if tab == 'register' %}active{% endif %}"
+                    onclick="switchTab('register')">Register</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="form-login" class="auth-form {% if tab != 'login' %}hidden{% endif %}"
+              method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" placeholder="Enter your username"
+                       autocomplete="username" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="Enter your password"
+                       autocomplete="current-password" required>
+            </div>
+            <button type="submit" class="btn-primary full-width">Log In</button>
+            <p class="auth-switch">No account?
+                <a href="#" onclick="switchTab('register')">Register here</a>
+            </p>
+        </form>
+
+        <!-- Register Form -->
+        <form id="form-register" class="auth-form {% if tab != 'register' %}hidden{% endif %}"
+              method="POST" action="{{ url_for('register') }}">
+            <div class="form-group">
+                <label>Username <span class="hint">(min 3 chars)</span></label>
+                <input type="text" name="username" placeholder="Choose a username"
+                       autocomplete="username" minlength="3" required>
+            </div>
+            <div class="form-group">
+                <label>Password <span class="hint">(min 6 chars)</span></label>
+                <input type="password" name="password" placeholder="Choose a password"
+                       autocomplete="new-password" minlength="6" required>
+            </div>
+            <div class="form-group">
+                <label>Confirm Password</label>
+                <input type="password" name="confirm_password" placeholder="Repeat your password"
+                       autocomplete="new-password" required>
+            </div>
+            <button type="submit" class="btn-primary full-width">Create Account</button>
+            <p class="auth-switch">Already have an account?
+                <a href="#" onclick="switchTab('login')">Log in</a>
+            </p>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(tab) {
+    document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('form-register').classList.toggle('hidden', tab !== 'register');
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register'));
+    });
+}
+</script>
+{% endblock %}

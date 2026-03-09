@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — InterviewAI{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    {% if stats %}
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total }}</div>
+            <div class="stat-label">Interviews Done</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.best }}%</div>
+            <div class="stat-label">Best Score</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.avg }}%</div>
+            <div class="stat-label">Avg Score</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.last_role.split()[0] }}</div>
+            <div class="stat-label">Last Role</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <h2 class="section-title">Choose Your Interview Role</h2>
+
+    <div class="role-grid">
+        {% for role in roles %}
+        <div class="role-card" id="card-{{ loop.index }}">
+
+            <!-- Default view -->
+            <div class="role-card-front" id="front-{{ loop.index }}">
+                <div class="role-icon">{{ icons[role] }}</div>
+                <h3>{{ role }}</h3>
+                <p class="role-desc">5 questions &middot; NLP analysis &middot; Instant feedback</p>
+                <button class="btn-primary" data-idx="{{ loop.index }}" onclick="showLevels(this.dataset.idx)">
+                    Select Level
+                </button>
+            </div>
+
+            <!-- Level picker (hidden by default) -->
+            <div class="role-card-levels hidden" id="levels-{{ loop.index }}">
+                <div class="level-header">
+                    <span>{{ icons[role] }} {{ role }}</span>
+                    <button class="back-btn" data-idx="{{ loop.index }}" onclick="hideLevels(this.dataset.idx)">✕</button>
+                </div>
+                <p class="level-sub">Pick your experience level:</p>
+
+                {% for key, info in levels.items() %}
+                <a href="{{ url_for('interview', role=role, level=key) }}" class="level-option level-{{ key }}">
+                    <span class="level-opt-icon">{{ info.icon }}</span>
+                    <span class="level-opt-body">
+                        <span class="level-opt-label">{{ info.label }}</span>
+                        <span class="level-opt-years">{{ info.years }}</span>
+                    </span>
+                    <span class="level-opt-arrow">→</span>
+                </a>
+                {% endfor %}
+            </div>
+
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showLevels(idx) {
+    document.getElementById('front-' + idx).classList.add('hidden');
+    document.getElementById('levels-' + idx).classList.remove('hidden');
+}
+function hideLevels(idx) {
+    document.getElementById('levels-' + idx).classList.add('hidden');
+    document.getElementById('front-' + idx).classList.remove('hidden');
+}
+</script>
+{% endblock %}

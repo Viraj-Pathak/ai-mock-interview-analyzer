@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block title %}{{ role }} Interview — InterviewAI{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <!-- Sticky progress -->
+    <div class="interview-header">
+        <div>
+            <h2>{{ role }} Interview</h2>
+            <span class="level-badge level-{{ level }}">{{ level_info.icon }} {{ level_info.label }} &middot; {{ level_info.years }}</span>
+        </div>
+        <div class="progress-meta">
+            <span id="progressLabel">0 / {{ questions|length }} answered</span>
+        </div>
+    </div>
+    <div class="progress-bar sticky-progress">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <form method="POST" onsubmit="return prepareSubmit()" data-total="{{ questions|length }}">
+        <input type="hidden" name="tab_switches" id="tabSwitches" value="0">
+
+        <!-- Camera toggle -->
+        <div class="card camera-card">
+            <div class="camera-toggle-row">
+                <label class="toggle-label">
+                    <input type="checkbox" id="cameraToggle" name="camera" value="on"
+                           onchange="toggleCamera()">
+                    <span class="toggle-track"></span>
+                    <span>Enable Camera Monitoring</span>
+                </label>
+                <span class="camera-hint">+10 bonus points for enabling camera</span>
+            </div>
+            <video id="video" autoplay muted playsinline
+                   style="display:none; border-radius:8px; margin-top:12px; max-width:300px;"></video>
+        </div>
+
+        <!-- Tab-switch warning -->
+        <div id="tabWarning" class="alert-warning" style="display:none;">
+            ⚠️ Tab switch detected! Each switch deducts 5 points.
+        </div>
+
+        <!-- Questions -->
+        {% for question in questions %}
+        <div class="card question-card" id="qcard-{{ loop.index }}">
+            <div class="question-header">
+                <span class="q-number">Q{{ loop.index }}</span>
+                <h3>{{ question }}</h3>
+            </div>
+
+            <div class="answer-area">
+                <textarea
+                    name="answers"
+                    id="answer-{{ loop.index }}"
+                    placeholder="Type your answer here... (aim for 50+ words)"
+                    rows="5"
+                    required
+                    oninput="updateProgress()"></textarea>
+                <div class="answer-footer">
+                    <span class="word-count" id="wc-{{ loop.index }}">0 words</span>
+                    <button type="button" class="btn-mic"
+                            data-q="{{ loop.index }}"
+                            onclick="toggleSpeech(this.dataset.q)"
+                            id="mic-{{ loop.index }}"
+                            title="Click to dictate your answer">
+                        🎤 Dictate
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="submit-row">
+            <a href="{{ url_for('dashboard') }}" class="btn-outline">Cancel</a>
+            <button type="submit" class="btn-primary btn-lg" id="submitBtn" disabled>
+                Submit Interview
+            </button>
+        </div>
+    </form>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Tab-switch tracking ───────────────────────────────────────
+let tabSwitchCount = 0;
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        tabSwitchCount++;
+        document.getElementById('tabSwitches').value = tabSwitchCount;
+        const warn = document.getElementById('tabWarning');
+        warn.style.display = 'block';
+        warn.textContent = `⚠️ Tab switch detected (${tabSwitchCount}x)! Each switch deducts 5 points.`;
+    }
+});
+
+// ── Progress tracking ─────────────────────────────────────────
+const totalQs = parseInt(document.querySelector('form[data-total]').dataset.total, 10);
+
+function updateProgress() {
+    const textareas = document.querySelectorAll('textarea[name="answers"]');
+    let filled = 0;
+    textareas.forEach((ta, i) => {
+        const words = ta.value.trim().split(/\s+/).filter(w => w).length;
+        document.getElementById(`wc-${i + 1}`).textContent = `${words} word${words !== 1 ? 's' : ''}`;
+        if (ta.value.trim()) filled++;
+    });
+    const pct = (filled / totalQs) * 100;
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = `${filled} / ${totalQs} answered`;
+    document.getElementById('submitBtn').disabled = filled < totalQs;
+}
+
+// ── Camera toggle ─────────────────────────────────────────────
+function toggleCamera() {
+    const video = document.getElementById('video');
+    const toggle = document.getElementById('cameraToggle');
+    if (toggle.checked) {
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+                video.style.display = 'block';
+            })
+            .catch(() => {
+                toggle.checked = false;
+                alert('Camera access denied. Please allow camera permissions.');
+            });
+    } else {
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(t => t.stop());
+            video.srcObject = null;
+        }
+        video.style.display = 'none';
+    }
+}
+
+// ── Speech-to-text dictation ──────────────────────────────────
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let activeRecognition = null;
+let activeQIndex = null;
+
+function toggleSpeech(qIndex) {
+    if (!SpeechRecognition) {
+        alert('Speech recognition is not supported in this browser. Try Chrome or Edge.');
+        return;
+    }
+    const btn = document.getElementById(`mic-${qIndex}`);
+
+    // Stop if already recording this question
+    if (activeQIndex === qIndex && activeRecognition) {
+        activeRecognition.stop();
+        return;
+    }
+
+    // Stop any other active recognition
+    if (activeRecognition) activeRecognition.stop();
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    const textarea = document.getElementById(`answer-${qIndex}`);
+    const baseText = textarea.value;
+
+    recognition.onstart = () => {
+        activeQIndex = qIndex;
+        activeRecognition = recognition;
+        btn.textContent = '⏹ Stop';
+        btn.classList.add('recording');
+    };
+
+    recognition.onresult = (event) => {
+        let interim = '';
+        let final = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) final += event.results[i][0].transcript + ' ';
+            else interim += event.results[i][0].transcript;
+        }
+        textarea.value = baseText + final + interim;
+        updateProgress();
+    };
+
+    recognition.onend = () => {
+        activeRecognition = null;
+        activeQIndex = null;
+        btn.textContent = '🎤 Dictate';
+        btn.classList.remove('recording');
+        updateProgress();
+    };
+
+    recognition.start();
+}
+
+// ── Form submit prep ──────────────────────────────────────────
+function prepareSubmit() {
+    document.getElementById('tabSwitches').value = tabSwitchCount;
+    // Stop camera stream on submit
+    const video = document.getElementById('video');
+    if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+    return true;
+}
+
+// Initialise word counts
+document.querySelectorAll('textarea[name="answers"]').forEach((ta, i) => {
+    ta.addEventListener('input', updateProgress);
+});
+</script>
+{% endblock %}

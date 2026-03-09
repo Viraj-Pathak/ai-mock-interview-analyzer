@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Server Error — InterviewAI{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="error-code">500</div>
+    <h2>Something Went Wrong</h2>
+    <p>An unexpected error occurred. Please try again in a moment.</p>
+    <a href="{{ url_for('home') }}"><button class="btn-primary">Go Home</button></a>
+</div>
+{% endblock %}
