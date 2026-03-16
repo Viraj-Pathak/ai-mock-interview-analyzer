@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Replay — {{ record.role }} — PrepIQ{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="replay-header">
+        <a href="{{ url_for('result', interview_id=record.id) }}" class="back-link">← Results</a>
+        <h2>📼 Interview Replay</h2>
+        <p class="sub-text">
+            {{ record.role }} &middot;
+            {{ level_info.icon }} {{ level_info.label }} &middot;
+            {{ record.date.strftime('%B %d, %Y') }} &middot;
+            Overall: <strong>{{ record.overall }}%</strong>
+        </p>
+    </div>
+
+    {% for pair in qa_pairs %}
+    <div class="replay-question-block">
+        <div class="question-header">
+            <span class="q-number">Q{{ loop.index }}</span>
+            <h3>{{ pair.question }}</h3>
+            {% if pair.scores %}
+            <span class="q-final-score {{ 'good' if pair.scores.final_score >= 70 else ('ok' if pair.scores.final_score >= 45 else 'low') }}">
+                {{ pair.scores.final_score }}%
+            </span>
+            {% endif %}
+        </div>
+
+        {% if pair.scores %}
+        <div class="replay-scores-row">
+            <span class="q-badge">Relevance: {{ pair.scores.relevance_score }}%</span>
+            <span class="q-badge">Confidence: {{ pair.scores.confidence_score }}%</span>
+            <span class="q-badge">{{ pair.scores.word_count }} words</span>
+        </div>
+        {% endif %}
+
+        <div class="replay-your-answer">
+            <div class="replay-answer-label">Your Answer</div>
+            {% if pair.your_answer %}
+            <p>{{ pair.your_answer }}</p>
+            {% else %}
+            <p class="muted-text">Answer not recorded (interview was completed before replay was available).</p>
+            {% endif %}
+        </div>
+
+        {% if pair.ideal_answer %}
+        <div class="collapsible-trigger" onclick="toggleIdeal({{ loop.index }})">
+            💡 Show Ideal Answer <span id="arrow-{{ loop.index }}">▼</span>
+        </div>
+        <div class="replay-ideal-answer" id="ideal-{{ loop.index }}" style="display:none;">
+            <div class="replay-answer-label">Ideal Answer</div>
+            <p>{{ pair.ideal_answer }}</p>
+        </div>
+        {% endif %}
+
+        {% if pair.scores and pair.scores.feedback %}
+        {% for fb in pair.scores.feedback %}
+        <p class="q-feedback">{% if 'Excellent' in fb %}✅{% else %}💡{% endif %} {{ fb }}</p>
+        {% endfor %}
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="result-actions">
+        <a href="{{ url_for('dashboard') }}"><button class="btn-primary">Try Again</button></a>
+        <a href="{{ url_for('history') }}"><button class="btn-outline">History</button></a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleIdeal(idx) {
+    const el    = document.getElementById(`ideal-${idx}`);
+    const arrow = document.getElementById(`arrow-${idx}`);
+    const open  = el.style.display === 'none';
+    el.style.display = open ? 'block' : 'none';
+    arrow.textContent = open ? '▲' : '▼';
+}
+</script>
+{% endblock %}

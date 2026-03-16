@@ -4,6 +4,32 @@
 {% block content %}
 <div class="container">
 
+    <!-- Schedule reminders (upcoming within 48h) -->
+    {% set now_dt = now if now is defined else none %}
+    {% for s in upcoming %}
+    <div class="reminder-card {% if now_dt and (s.scheduled_at - now_dt).total_seconds() < 86400 %}soon{% endif %}">
+        <span>📅 <strong>{{ s.role }}</strong> — {{ s.level|title }} &middot; {{ s.scheduled_at.strftime('%b %d, %H:%M') }} UTC</span>
+        {% if s.note %}<span class="reminder-note">{{ s.note }}</span>{% endif %}
+        <form method="POST" action="{{ url_for('schedule') }}" style="display:inline;">
+            <input type="hidden" name="action" value="dismiss">
+            <input type="hidden" name="schedule_id" value="{{ s.id }}">
+            <button type="submit" class="dismiss-btn">Dismiss</button>
+        </form>
+    </div>
+    {% endfor %}
+
+    <!-- Streak badge -->
+    {% if streak and streak.current_streak > 0 %}
+    <div class="streak-banner">
+        <span class="streak-badge active">🔥 {{ streak.current_streak }}-day streak</span>
+        <span class="streak-meta">Longest: {{ streak.longest_streak }} days</span>
+    </div>
+    {% elif stats %}
+    <div class="streak-banner">
+        <span class="streak-zero">💤 No active streak — do an interview today!</span>
+    </div>
+    {% endif %}
+
     {% if stats %}
     <div class="stats-row">
         <div class="stat-card">

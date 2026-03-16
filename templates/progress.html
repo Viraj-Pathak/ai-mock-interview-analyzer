@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Progress — {{ role }} — PrepIQ{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="progress-page-header">
+        <a href="{{ url_for('dashboard') }}" class="back-link">← Dashboard</a>
+        <h2>📈 Progress: {{ role }}</h2>
+        <p class="sub-text">Track your scores over time for this role.</p>
+    </div>
+
+    <!-- Role switcher -->
+    <div class="role-switcher">
+        {% for slug, name in all_roles %}
+        <a href="{{ url_for('progress', role_slug=slug) }}"
+           class="role-chip {% if name == role %}active{% endif %}">{{ name }}</a>
+        {% endfor %}
+    </div>
+
+    {% if records|length < 2 %}
+    <div class="no-data-state">
+        <p>You need at least 2 interviews for <strong>{{ role }}</strong> to see a trend.</p>
+        {% for key, info in {'fresher': {'label':'Fresher','icon':'🌱'}, 'mid': {'label':'Mid-Level','icon':'⚡'}, 'senior': {'label':'Senior','icon':'🏆'}}.items() %}
+        <a href="{{ url_for('interview', role_slug=role_slug, level=key) }}" class="btn-primary" style="margin:4px;">
+            {{ info.icon }} {{ info.label }}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card chart-card">
+        <h3>Score Trend</h3>
+        <div class="chart-container">
+            <canvas id="progressChart" data-chart='{{ chart_data }}'></canvas>
+        </div>
+        <div class="score-legend">
+            <span class="legend-dot" style="background:#818cf8;"></span> Overall &nbsp;
+            <span class="legend-dot" style="background:#38bdf8;"></span> Relevance &nbsp;
+            <span class="legend-dot" style="background:#4ade80;"></span> Confidence &nbsp;
+            <span class="legend-dot" style="background:#fb923c;"></span> Clarity
+        </div>
+    </div>
+
+    <h3 class="section-title">All Attempts ({{ records|length }})</h3>
+    {% for r in records|reverse %}
+    <div class="card q-result-card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span class="q-number">{{ loop.index }}</span>
+        <span style="flex:1;">{{ r.date.strftime('%b %d, %Y') }} &middot; {{ r.level|title }}</span>
+        <span class="q-badge">Overall: <strong>{{ r.overall }}%</strong></span>
+        <span class="q-badge">Relevance: {{ r.relevance }}%</span>
+        <span class="q-badge">Confidence: {{ r.confidence }}%</span>
+        <a href="{{ url_for('replay', interview_id=r.id) }}" class="btn-outline" style="padding:4px 10px;font-size:0.8rem;">Replay</a>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const canvas = document.getElementById('progressChart');
+if (canvas) {
+    const d = JSON.parse(canvas.dataset.chart);
+    new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: d.dates,
+            datasets: [
+                { label: 'Overall',    data: d.overall,    borderColor: '#818cf8', backgroundColor: 'rgba(129,140,248,0.08)', tension: 0.3, pointRadius: 4 },
+                { label: 'Relevance',  data: d.relevance,  borderColor: '#38bdf8', backgroundColor: 'transparent', tension: 0.3, pointRadius: 4 },
+                { label: 'Confidence', data: d.confidence, borderColor: '#4ade80', backgroundColor: 'transparent', tension: 0.3, pointRadius: 4 },
+                { label: 'Clarity',    data: d.clarity,    borderColor: '#fb923c', backgroundColor: 'transparent', tension: 0.3, pointRadius: 4 },
+            ]
+        },
+        options: {
+            scales: {
+                y: { min: 0, max: 100, ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+                x: { ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } }
+            },
+            plugins: { legend: { labels: { color: '#e2e8f0' } } }
+        }
+    });
+}
+</script>
+{% endblock %}

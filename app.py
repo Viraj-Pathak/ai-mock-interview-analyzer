@@ -2,6 +2,9 @@ import os
 import re
 import json
 import datetime
+from collections import Counter
+
+from sqlalchemy import text
 
 from flask import (
     Flask, render_template, request, redirect,
@@ -35,12 +38,16 @@ if DATABASE_URL.startswith('postgres://'):
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024   # 2 MB upload limit
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 # Secure cookies in production (HTTPS)
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 
 db = SQLAlchemy(app)
+
+# Custom Jinja filter so templates can do {{ json_string | from_json }}
+app.jinja_env.filters['from_json'] = json.loads
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -70,14 +77,42 @@ class Interview(db.Model):
     overall = db.Column(db.Float, nullable=False)
     word_count = db.Column(db.Integer, nullable=True)
     filler_count = db.Column(db.Integer, nullable=True)
-    feedback = db.Column(db.Text, nullable=True)       # JSON list of feedback strings
-    per_question = db.Column(db.Text, nullable=True)   # JSON list of per-question dicts
+    feedback = db.Column(db.Text, nullable=True)          # JSON list of feedback strings
+    per_question = db.Column(db.Text, nullable=True)      # JSON list of per-question dicts
+    submitted_answers = db.Column(db.Text, nullable=True) # JSON list of raw answer strings (replay)
+    multi_face_count = db.Column(db.Integer, nullable=True, default=0)
     date = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class ScheduledInterview(db.Model):
+    id           = db.Column(db.Integer, primary_key=True)
+    username     = db.Column(db.String(100), nullable=False)
+    role         = db.Column(db.String(100), nullable=False)
+    level        = db.Column(db.String(20), nullable=True)
+    scheduled_at = db.Column(db.DateTime, nullable=False)
+    note         = db.Column(db.Text, nullable=True)
+    dismissed    = db.Column(db.Boolean, default=False)
+    created_at   = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class ResumeMatch(db.Model):
+    id         = db.Column(db.Integer, primary_key=True)
+    username   = db.Column(db.String(100), nullable=False)
+    role       = db.Column(db.String(100), nullable=False)
+    score      = db.Column(db.Float, nullable=False)
+    matched_kw = db.Column(db.Text, nullable=True)   # JSON list
+    missing_kw = db.Column(db.Text, nullable=True)   # JSON list
+    created_at = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 
 with app.app_context():
     try:
         db.create_all()
+        # Add new columns to existing Interview table (safe on Postgres, idempotent)
+        with db.engine.connect() as _conn:
+            _conn.execute(text("ALTER TABLE interview ADD COLUMN IF NOT EXISTS submitted_answers TEXT"))
+            _conn.execute(text("ALTER TABLE interview ADD COLUMN IF NOT EXISTS multi_face_count INTEGER DEFAULT 0"))
+            _conn.commit()
     except Exception as e:
         print(f"DB init error: {e}")
 
@@ -552,6 +587,217 @@ def login_required(f):
     return decorated
 
 
+# ── Anti-cheat / feature constants ───────────────────────────────────────────
+
+CODING_ROLES = {
+    "Software Engineer", "Frontend Developer", "Backend Developer",
+    "Data Engineer", "Data Scientist", "AI/ML Engineer",
+    "Embedded Systems Engineer", "DevOps Engineer",
+}
+
+# ── Follow-up question templates ──────────────────────────────────────────────
+
+FOLLOWUP_TEMPLATES = {
+    "low_relevance": [
+        "Let's go deeper — {q} Provide a specific real-world example where you applied this.",
+        "Your answer missed some key concepts. Rephrase your answer to: {q} — focus on the core technical details.",
+        "If you were explaining this to a junior colleague, how would you answer: {q}",
+    ],
+    "low_confidence": [
+        "Try answering again with more conviction: {q} Lead with your conclusion first.",
+        "What is the one thing you're most certain about when it comes to: {q}",
+    ],
+    "too_brief": [
+        "Your answer was too short. Walk through your full reasoning for: {q}",
+        "Expand on your answer — add a real example or describe a trade-off for: {q}",
+    ],
+    "general": [
+        "What would you add or change in your answer to: {q}",
+        "What edge cases or failure scenarios apply to: {q}",
+    ],
+}
+
+STUDY_RESOURCES = {
+    "low_relevance": {
+        "title": "Improve Technical Depth", "icon": "📚", "priority": "HIGH",
+        "actions": [
+            "Review core concepts for your target role using structured study guides.",
+            "Use the STAR method (Situation → Task → Action → Result) for every behavioural answer.",
+            "Open the Replay page for past interviews to compare your answers with ideal answers.",
+            "Re-attempt the same role after 2–3 days of focused study.",
+        ],
+    },
+    "low_confidence": {
+        "title": "Build Answer Confidence", "icon": "🎯", "priority": "HIGH",
+        "actions": [
+            "Record yourself answering questions aloud and listen back critically.",
+            "Lead every answer with your conclusion, then explain the reasoning behind it.",
+            "Replace hedging phrases like 'I think maybe' with definitive statements.",
+            "Use the Dictate feature on the interview page to practice speaking answers.",
+        ],
+    },
+    "too_brief": {
+        "title": "Expand Your Answers", "icon": "📝", "priority": "MEDIUM",
+        "actions": [
+            "Aim for 80–120 words minimum per answer (use the word counter on the interview page).",
+            "Structure every answer: definition → how it works → real example → trade-off.",
+            "Draw from personal or university projects if you lack professional experience.",
+            "Ask 'So what?' after each sentence — if you can't answer, add more.",
+        ],
+    },
+    "filler_words": {
+        "title": "Reduce Filler Words", "icon": "🗣", "priority": "MEDIUM",
+        "actions": [
+            "Identify your top 3 filler words from past interview reports on the History page.",
+            "Pause silently instead of saying 'um', 'like', or 'basically'.",
+            "Slow your speaking pace — rushing causes more fillers.",
+            "Practice the Dictate feature to hear yourself and self-correct.",
+        ],
+    },
+    "low_clarity": {
+        "title": "Improve Answer Clarity", "icon": "💡", "priority": "MEDIUM",
+        "actions": [
+            "Structure every answer: key point first → reasoning → example.",
+            "Define technical terms as you use them — don't assume the interviewer knows.",
+            "Write a one-sentence summary of your answer in your head before expanding.",
+            "Review the Replay page — reread your answers to spot unclear sentences.",
+        ],
+    },
+}
+
+
+def calculate_streak(username):
+    """Return current and longest consecutive-day interview streaks."""
+    records = Interview.query.filter_by(username=username).all()
+    if not records:
+        return {"current_streak": 0, "longest_streak": 0}
+
+    today = datetime.datetime.now(datetime.timezone.utc).date()
+    dates = sorted(set(
+        (r.date if r.date.tzinfo else r.date.replace(tzinfo=datetime.timezone.utc))
+        .astimezone(datetime.timezone.utc).date()
+        for r in records
+    ), reverse=True)
+
+    # Current streak: walk backwards from most-recent date
+    current = 0
+    if dates[0] >= today - datetime.timedelta(days=1):
+        current = 1
+        expected = dates[0] - datetime.timedelta(days=1)
+        for d in dates[1:]:
+            if d == expected:
+                current += 1
+                expected -= datetime.timedelta(days=1)
+            elif d < expected:
+                break
+
+    # Longest streak
+    dates_asc = sorted(dates)
+    longest, run = 1, 1
+    for i in range(1, len(dates_asc)):
+        if (dates_asc[i] - dates_asc[i - 1]).days == 1:
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 1
+
+    return {"current_streak": current, "longest_streak": longest}
+
+
+def get_weak_areas(username):
+    """Aggregate feedback and score patterns across all user interviews."""
+    records = Interview.query.filter_by(username=username).all()
+    if not records:
+        return None
+
+    feedback_counter = Counter()
+    role_scores = {}
+    low_counts = {"relevance": 0, "confidence": 0, "clarity": 0}
+
+    for r in records:
+        role_scores.setdefault(r.role, []).append(r.overall)
+        if r.relevance < 60:
+            low_counts["relevance"] += 1
+        if r.confidence < 60:
+            low_counts["confidence"] += 1
+        if r.clarity and r.clarity < 60:
+            low_counts["clarity"] += 1
+        if r.per_question:
+            for qr in json.loads(r.per_question):
+                if qr.get("final_score", 100) < 70:
+                    for fb in qr.get("feedback", []):
+                        feedback_counter[fb] += 1
+
+    def _cat(fb):
+        f = fb.lower()
+        if any(w in f for w in ["relevance", "relevant", "topic", "concept", "address"]):
+            return "low_relevance"
+        if any(w in f for w in ["confidence", "sentiment", "filler", "uncertain"]):
+            return "low_confidence"
+        if any(w in f for w in ["word", "brief", "short", "expand"]):
+            return "too_brief"
+        if any(w in f for w in ["clarity", "clear", "structure"]):
+            return "low_clarity"
+        return "general"
+
+    categorized = {}
+    for fb, count in feedback_counter.most_common(15):
+        cat = _cat(fb)
+        categorized.setdefault(cat, []).append({"text": fb, "count": count})
+
+    role_averages = {
+        role: round(sum(scores) / len(scores), 1)
+        for role, scores in role_scores.items()
+    }
+
+    return {
+        "categorized_feedback": categorized,
+        "role_averages": role_averages,
+        "low_counts": low_counts,
+        "total": len(records),
+    }
+
+
+def generate_followups(per_question_results, questions, role, level):
+    """Generate targeted follow-up questions for answers scoring below 70."""
+    followups = []
+    ideal = IDEAL_ANSWERS.get(role, {}).get(level, {})
+
+    for i, qr in enumerate(per_question_results):
+        if qr.get("final_score", 100) >= 70 or i >= len(questions):
+            continue
+        q = questions[i]
+        rel = qr.get("relevance_score", 100)
+        conf = qr.get("confidence_score", 100)
+        wc = qr.get("word_count", 50)
+
+        if rel < 50:
+            cat = "low_relevance"
+        elif conf < 50:
+            cat = "low_confidence"
+        elif wc < 30:
+            cat = "too_brief"
+        else:
+            cat = "general"
+
+        templates = FOLLOWUP_TEMPLATES[cat]
+        followup_q = templates[i % len(templates)].format(q=q)
+
+        hint = ""
+        ideal_text = ideal.get(q, "")
+        if ideal_text:
+            hint = (ideal_text.split(".")[0] + ".") if "." in ideal_text else ideal_text[:120]
+            hint = hint[:150]
+
+        followups.append({
+            "question_index": i,
+            "followup_question": followup_q,
+            "hint": hint,
+            "score": qr.get("final_score", 0),
+        })
+    return followups
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -652,13 +898,27 @@ def dashboard():
             'last_role': interviews[-1].role,
         }
 
+    streak = calculate_streak(username)
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    upcoming = ScheduledInterview.query.filter_by(
+        username=username, dismissed=False
+    ).filter(
+        ScheduledInterview.scheduled_at <= now + datetime.timedelta(hours=48),
+        ScheduledInterview.scheduled_at >= now,
+    ).order_by(ScheduledInterview.scheduled_at).all()
+
     return render_template(
         'dashboard.html',
         roles=QUESTIONS.keys(),
         icons=ROLE_ICONS,
         levels=LEVELS,
         stats=stats,
+        streak=streak,
+        upcoming=upcoming,
+        now=now,
         role_slugs={r: to_slug(r) for r in QUESTIONS},
+        coding_roles=CODING_ROLES,
     )
 
 
@@ -700,6 +960,18 @@ def interview(role_slug, level):
             gaze_look_away, gaze_no_face = 0, 0
         gaze_penalty = gaze_look_away * 5 + (gaze_no_face // 5) * 2
 
+        # Multiple-face detection penalty
+        try:
+            multi_face = min(int(request.form.get('multi_face_count', 0)), 20)
+        except (ValueError, TypeError):
+            multi_face = 0
+
+        # Background audio alerts penalty
+        try:
+            audio_alerts = min(int(request.form.get('audio_alerts', 0)), 10)
+        except (ValueError, TypeError):
+            audio_alerts = 0
+
         if len(answers) != len(questions):
             flash('Please answer all questions.', 'error')
             return render_template('interview.html', role=role, level=level,
@@ -718,6 +990,8 @@ def interview(role_slug, level):
         cheating_penalty = tab_switches * 5
         cheating_penalty += pastes_detected * 10
         cheating_penalty += gaze_penalty
+        cheating_penalty += multi_face * 8
+        cheating_penalty += audio_alerts * 3
         if camera != 'on':
             cheating_penalty += 10
 
@@ -746,6 +1020,8 @@ def interview(role_slug, level):
             filler_count=filler_count,
             feedback=json.dumps(all_feedback),
             per_question=json.dumps(analysis['per_question']),
+            submitted_answers=json.dumps(answers),
+            multi_face_count=multi_face,
         )
         db.session.add(record)
         db.session.commit()
@@ -753,7 +1029,8 @@ def interview(role_slug, level):
         return redirect(url_for('result', interview_id=record.id))
 
     return render_template('interview.html', role=role, level=level,
-                           level_info=level_info, questions=questions)
+                           level_info=level_info, questions=questions,
+                           show_editor=(role in CODING_ROLES))
 
 
 @app.route('/result/<int:interview_id>')
@@ -769,6 +1046,8 @@ def result(interview_id):
     questions = QUESTIONS.get(record.role, {}).get(rec_level, [])
     level_info = LEVELS.get(rec_level, LEVELS['fresher'])
 
+    followups = generate_followups(per_question, questions, record.role, rec_level)
+
     return render_template(
         'result.html',
         record=record,
@@ -776,6 +1055,7 @@ def result(interview_id):
         per_question=per_question,
         questions=questions,
         level_info=level_info,
+        followups=followups,
     )
 
 
@@ -802,6 +1082,256 @@ def delete_interview(interview_id):
     db.session.commit()
     flash('Interview record deleted.', 'info')
     return redirect(url_for('history'))
+
+
+# ── Progress tracker ──────────────────────────────────────────────────────────
+
+@app.route('/progress/<role_slug>')
+@login_required
+def progress(role_slug):
+    role = ROLE_SLUGS.get(role_slug)
+    if not role:
+        flash('Unknown role.', 'error')
+        return redirect(url_for('dashboard'))
+
+    records = Interview.query.filter_by(
+        username=session['username'], role=role
+    ).order_by(Interview.date.asc()).all()
+
+    chart_data = {
+        'dates':      [r.date.strftime('%b %d') for r in records],
+        'overall':    [r.overall    for r in records],
+        'relevance':  [r.relevance  for r in records],
+        'confidence': [r.confidence for r in records],
+        'clarity':    [r.clarity or 0 for r in records],
+    }
+    all_roles = [(to_slug(r), r) for r in QUESTIONS.keys()]
+    return render_template('progress.html', role=role, role_slug=role_slug,
+                           records=records, chart_data=json.dumps(chart_data),
+                           all_roles=all_roles)
+
+
+# ── Weak areas ────────────────────────────────────────────────────────────────
+
+@app.route('/weak-areas')
+@login_required
+def weak_areas():
+    data = get_weak_areas(session['username'])
+    return render_template('weak_areas.html', data=data, study_resources=STUDY_RESOURCES)
+
+
+# ── Study plan ────────────────────────────────────────────────────────────────
+
+@app.route('/study-plan')
+@login_required
+def study_plan():
+    data = get_weak_areas(session['username'])
+    if not data:
+        return render_template('study_plan.html', plan=[], total=0)
+
+    # Build ordered plan: present categories with most issues first
+    order = ['low_relevance', 'low_confidence', 'too_brief', 'filler_words', 'low_clarity']
+    cat_counts = {cat: len(items) for cat, items in data['categorized_feedback'].items()}
+    # also factor in low_counts scores
+    if data['low_counts']['relevance'] > data['total'] * 0.4:
+        cat_counts['low_relevance'] = cat_counts.get('low_relevance', 0) + 5
+    if data['low_counts']['confidence'] > data['total'] * 0.4:
+        cat_counts['low_confidence'] = cat_counts.get('low_confidence', 0) + 5
+
+    plan = []
+    seen = set()
+    for cat in sorted(cat_counts, key=lambda c: -cat_counts.get(c, 0)):
+        if cat in STUDY_RESOURCES and cat not in seen:
+            plan.append(STUDY_RESOURCES[cat])
+            seen.add(cat)
+    # Always include at least general confidence tip
+    for cat in order:
+        if cat not in seen and cat in STUDY_RESOURCES:
+            plan.append(STUDY_RESOURCES[cat])
+            seen.add(cat)
+
+    return render_template('study_plan.html', plan=plan, total=data['total'],
+                           role_averages=data['role_averages'])
+
+
+# ── Interview replay ───────────────────────────────────────────────────────────
+
+@app.route('/replay/<int:interview_id>')
+@login_required
+def replay(interview_id):
+    record = Interview.query.filter_by(
+        id=interview_id, username=session['username']
+    ).first_or_404()
+
+    rec_level = record.level or 'fresher'
+    questions = QUESTIONS.get(record.role, {}).get(rec_level, [])
+    per_question = json.loads(record.per_question) if record.per_question else []
+    submitted = json.loads(record.submitted_answers) if record.submitted_answers else []
+    ideal = IDEAL_ANSWERS.get(record.role, {}).get(rec_level, {})
+    level_info = LEVELS.get(rec_level, LEVELS['fresher'])
+
+    qa_pairs = []
+    for i, q in enumerate(questions):
+        qa_pairs.append({
+            'question':     q,
+            'your_answer':  submitted[i] if i < len(submitted) else '',
+            'ideal_answer': ideal.get(q, ''),
+            'scores':       per_question[i] if i < len(per_question) else {},
+        })
+
+    return render_template('replay.html', record=record, qa_pairs=qa_pairs,
+                           level_info=level_info)
+
+
+# ── Resume match ───────────────────────────────────────────────────────────────
+
+@app.route('/resume-match', methods=['GET', 'POST'])
+@login_required
+def resume_match():
+    past = ResumeMatch.query.filter_by(
+        username=session['username']
+    ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
+
+    if request.method == 'POST':
+        role_slug = request.form.get('role_slug', '')
+        role = ROLE_SLUGS.get(role_slug)
+        uploaded = request.files.get('resume')
+
+        if not role or not uploaded:
+            flash('Please select a role and upload your resume.', 'error')
+            return render_template('resume_match.html', past=past,
+                                   roles=[(to_slug(r), r) for r in QUESTIONS.keys()])
+
+        # Extract text
+        resume_text = ''
+        fname = uploaded.filename.lower()
+        try:
+            if fname.endswith('.pdf'):
+                import pypdf
+                reader = pypdf.PdfReader(uploaded)
+                resume_text = ' '.join(
+                    page.extract_text() or '' for page in reader.pages
+                )
+            else:
+                resume_text = uploaded.read().decode('utf-8', errors='ignore')
+        except Exception:
+            flash('Could not parse the uploaded file. Please use PDF or TXT.', 'error')
+            return render_template('resume_match.html', past=past,
+                                   roles=[(to_slug(r), r) for r in QUESTIONS.keys()])
+
+        if len(resume_text.strip()) < 50:
+            flash('Resume text is too short or could not be extracted.', 'error')
+            return render_template('resume_match.html', past=past,
+                                   roles=[(to_slug(r), r) for r in QUESTIONS.keys()])
+
+        # Build role corpus from ideal answers
+        role_ideal = IDEAL_ANSWERS.get(role, {})
+        corpus_parts = []
+        for lvl_answers in role_ideal.values():
+            for ans in lvl_answers.values():
+                corpus_parts.append(ans)
+        role_corpus = ' '.join(corpus_parts)
+
+        # TF-IDF cosine similarity
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.metrics.pairwise import cosine_similarity
+        import numpy as np
+
+        vect = TfidfVectorizer(stop_words='english', max_features=500)
+        try:
+            tfidf = vect.fit_transform([role_corpus, resume_text])
+            score = float(cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0]) * 100
+        except Exception:
+            score = 0.0
+
+        # Keyword gap analysis
+        try:
+            feature_names = np.array(vect.get_feature_names_out())
+            role_weights = tfidf[0].toarray()[0]
+            top_idx = role_weights.argsort()[-40:][::-1]
+            top_kw = set(feature_names[top_idx])
+            resume_tokens = set(re.findall(r'[a-z]{3,}', resume_text.lower()))
+            matched = sorted(top_kw & resume_tokens)
+            missing = sorted(top_kw - resume_tokens)[:20]
+        except Exception:
+            matched, missing = [], []
+
+        rm = ResumeMatch(
+            username=session['username'],
+            role=role,
+            score=round(score, 1),
+            matched_kw=json.dumps(matched),
+            missing_kw=json.dumps(missing),
+        )
+        db.session.add(rm)
+        db.session.commit()
+
+        past = ResumeMatch.query.filter_by(
+            username=session['username']
+        ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
+        flash(f'Resume matched against {role} — score: {round(score, 1)}%', 'success')
+
+    return render_template('resume_match.html', past=past,
+                           roles=[(to_slug(r), r) for r in QUESTIONS.keys()])
+
+
+# ── Schedule ───────────────────────────────────────────────────────────────────
+
+@app.route('/schedule', methods=['GET', 'POST'])
+@login_required
+def schedule():
+    username = session['username']
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    if request.method == 'POST':
+        action = request.form.get('action', 'create')
+
+        if action == 'dismiss':
+            sid = request.form.get('schedule_id', type=int)
+            rec = ScheduledInterview.query.filter_by(id=sid, username=username).first()
+            if rec:
+                rec.dismissed = True
+                db.session.commit()
+            return redirect(url_for('schedule'))
+
+        role_slug = request.form.get('role_slug', '')
+        role = ROLE_SLUGS.get(role_slug)
+        level = request.form.get('level', 'fresher')
+        dt_str = request.form.get('scheduled_at', '')
+        note = request.form.get('note', '').strip()
+
+        if not role or level not in LEVELS or not dt_str:
+            flash('Please fill all required fields.', 'error')
+        else:
+            try:
+                scheduled_at = datetime.datetime.fromisoformat(dt_str).replace(
+                    tzinfo=datetime.timezone.utc)
+                if scheduled_at <= now:
+                    flash('Scheduled time must be in the future.', 'error')
+                else:
+                    db.session.add(ScheduledInterview(
+                        username=username, role=role, level=level,
+                        scheduled_at=scheduled_at, note=note or None,
+                    ))
+                    db.session.commit()
+                    flash('Interview scheduled!', 'success')
+            except ValueError:
+                flash('Invalid date/time format.', 'error')
+        return redirect(url_for('schedule'))
+
+    upcoming = ScheduledInterview.query.filter_by(
+        username=username, dismissed=False
+    ).filter(ScheduledInterview.scheduled_at >= now).order_by(
+        ScheduledInterview.scheduled_at
+    ).all()
+
+    past_sched = ScheduledInterview.query.filter_by(username=username).filter(
+        ScheduledInterview.scheduled_at < now
+    ).order_by(ScheduledInterview.scheduled_at.desc()).limit(5).all()
+
+    return render_template('schedule.html', upcoming=upcoming, past_sched=past_sched,
+                           roles=[(to_slug(r), r) for r in QUESTIONS.keys()],
+                           levels=LEVELS, now=now)
 
 
 # ── Error handlers ────────────────────────────────────────────────────────────

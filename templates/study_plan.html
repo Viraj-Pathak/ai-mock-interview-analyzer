@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Study Plan — PrepIQ{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>📋 Personalised Study Plan</h2>
+    <p class="sub-text">Generated from your {{ total }} interview session{{ 's' if total != 1 else '' }}.</p>
+
+    {% if not plan %}
+    <div class="no-data-state">
+        <p>Complete at least one interview to generate your study plan.</p>
+        <a href="{{ url_for('dashboard') }}" class="btn-primary">Start an Interview</a>
+    </div>
+    {% else %}
+
+    {% if role_averages %}
+    <div class="card" style="margin-bottom:20px;">
+        <h3>Your Role Averages</h3>
+        <div class="role-perf-grid">
+            {% for role, avg in role_averages.items() %}
+            <div class="role-perf-item">
+                <span class="role-perf-name">{{ role }}</span>
+                <div class="score-bar" style="margin-top:4px;">
+                    <div class="score-bar-fill {{ 'good' if avg >= 70 else ('ok' if avg >= 45 else 'low') }}"
+                         style="width:{{ avg }}%;"></div>
+                </div>
+                <span class="role-perf-score {{ 'good' if avg >= 70 else ('ok' if avg >= 45 else 'low') }}">{{ avg }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% for item in plan %}
+    <div class="study-card">
+        <div class="study-card-header">
+            <span class="study-card-icon">{{ item.icon }}</span>
+            <div>
+                <div class="study-card-title">{{ item.title }}</div>
+                <span class="study-priority priority-{{ item.priority|lower }}">{{ item.priority }}</span>
+            </div>
+        </div>
+        <ol class="action-list">
+            {% for action in item.actions %}
+            <li>{{ action }}</li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endfor %}
+
+    <div class="result-actions" style="margin-top:24px;">
+        <a href="{{ url_for('weak_areas') }}"><button class="btn-outline">🔍 View Weak Areas</button></a>
+        <a href="{{ url_for('dashboard') }}"><button class="btn-primary">Practice Now</button></a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

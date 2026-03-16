@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Resume Match — PrepIQ{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>📄 Resume Match</h2>
+    <p class="sub-text">Upload your resume and see how well it matches a target role's keyword profile.</p>
+
+    <div class="card upload-card">
+        <form method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Target Role</label>
+                <select name="role_slug" required class="form-select">
+                    <option value="">— Select a role —</option>
+                    {% for slug, name in roles %}
+                    <option value="{{ slug }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Resume File <span class="muted-text">(PDF or TXT, max 2 MB)</span></label>
+                <div class="upload-zone" id="uploadZone">
+                    <input type="file" name="resume" id="resumeFile" accept=".pdf,.txt"
+                           required onchange="showFileName(this)">
+                    <label for="resumeFile" class="upload-zone-label">
+                        📎 Click to upload or drag & drop
+                    </label>
+                    <p id="fileName" class="muted-text" style="margin-top:6px;"></p>
+                </div>
+            </div>
+            <button type="submit" class="btn-primary">Analyse Resume</button>
+        </form>
+    </div>
+
+    <!-- Past results -->
+    {% if past %}
+    <h3 class="section-title">Past Matches</h3>
+    {% for rm in past %}
+    <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+            <div class="match-score-ring" style="--pct:{{ rm.score }};">
+                <span>{{ rm.score }}%</span>
+            </div>
+            <div style="flex:1;">
+                <strong>{{ rm.role }}</strong>
+                <p class="muted-text" style="margin:2px 0;">{{ rm.created_at.strftime('%b %d, %Y') }}</p>
+                {% set matched = rm.matched_kw | tojson | tojson %}
+                {% set missing = rm.missing_kw | tojson | tojson %}
+                {% if rm.matched_kw %}
+                <div class="keyword-chips" style="margin-top:8px;">
+                    <span class="chip-label">Matched:</span>
+                    {% for kw in rm.matched_kw | from_json %}
+                    <span class="keyword-chip matched">{{ kw }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if rm.missing_kw %}
+                <div class="keyword-chips" style="margin-top:6px;">
+                    <span class="chip-label">Missing:</span>
+                    {% for kw in rm.missing_kw | from_json %}
+                    <span class="keyword-chip missing">{{ kw }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showFileName(input) {
+    const p = document.getElementById('fileName');
+    p.textContent = input.files[0] ? '✅ ' + input.files[0].name : '';
+}
+</script>
+{% endblock %}

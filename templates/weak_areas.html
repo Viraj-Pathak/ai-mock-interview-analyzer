@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Weak Areas — PrepIQ{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>🔍 Weak Areas Analysis</h2>
+    <p class="sub-text">Aggregated from all your past interview sessions.</p>
+
+    {% if not data %}
+    <div class="no-data-state">
+        <p>No interview data yet. Complete at least one interview to see your weak areas.</p>
+        <a href="{{ url_for('dashboard') }}" class="btn-primary">Start an Interview</a>
+    </div>
+    {% else %}
+
+    <!-- Role performance overview -->
+    <div class="card">
+        <h3>Role Performance</h3>
+        <div class="role-perf-grid">
+            {% for role, avg in data.role_averages.items() %}
+            <div class="role-perf-item">
+                <span class="role-perf-name">{{ role }}</span>
+                <div class="score-bar" style="margin-top:4px;">
+                    <div class="score-bar-fill" data-pct="{{ avg }}"
+                         style="background: {% if avg >= 70 %}var(--good){% elif avg >= 45 %}var(--ok){% else %}var(--low){% endif %}">
+                    </div>
+                </div>
+                <span class="role-perf-score {{ 'good' if avg >= 70 else ('ok' if avg >= 45 else 'low') }}">{{ avg }}%</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Category breakdown -->
+    {% set cat_labels = {
+        'low_relevance':  ('📚', 'Low Relevance'),
+        'low_confidence': ('🎯', 'Low Confidence'),
+        'too_brief':      ('📝', 'Too Brief'),
+        'low_clarity':    ('💡', 'Low Clarity'),
+        'filler_words':   ('🗣', 'Filler Words'),
+        'general':        ('⚠️', 'General'),
+    } %}
+
+    {% if data.categorized_feedback %}
+    <h3 class="section-title">Most Common Weaknesses</h3>
+    {% for cat, items in data.categorized_feedback.items() %}
+    {% set icon_label = cat_labels.get(cat, ('⚠️', cat|replace('_',' ')|title)) %}
+    <div class="weak-area-section">
+        <div class="weak-area-title">{{ icon_label[0] }} {{ icon_label[1] }}</div>
+        {% for item in items %}
+        <div class="weak-area-bar-row">
+            <span class="weak-area-text">{{ item.text }}</span>
+            <div class="weak-area-bar-track">
+                <div class="weak-area-bar-fill" style="width:{{ [item.count * 15, 100]|min }}%;"></div>
+            </div>
+            <span class="weak-area-count">{{ item.count }}×</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card" style="text-align:center;padding:32px;">
+        <p>🎉 No consistent weak areas found — great work!</p>
+    </div>
+    {% endif %}
+
+    <div class="result-actions" style="margin-top:24px;">
+        <a href="{{ url_for('study_plan') }}"><button class="btn-primary">📋 View Study Plan</button></a>
+        <a href="{{ url_for('resume_match') }}"><button class="btn-outline">📄 Resume Match</button></a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.score-bar-fill[data-pct]').forEach(el => {
+    const pct = Math.min(parseFloat(el.dataset.pct) || 0, 100);
+    requestAnimationFrame(() => { el.style.width = pct + '%'; });
+});
+</script>
+{% endblock %}

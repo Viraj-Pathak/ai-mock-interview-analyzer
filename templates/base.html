@@ -17,6 +17,10 @@
     <div class="navbar-links">
         <a href="{{ url_for('dashboard') }}">Dashboard</a>
         <a href="{{ url_for('history') }}">History</a>
+        <a href="{{ url_for('weak_areas') }}">Weak Areas</a>
+        <a href="{{ url_for('study_plan') }}">Study Plan</a>
+        <a href="{{ url_for('resume_match') }}">Resume Match</a>
+        <a href="{{ url_for('schedule') }}">Schedule</a>
         <span class="navbar-user">{{ session.username }}</span>
         <a href="{{ url_for('logout') }}" class="btn-outline-sm">Logout</a>
     </div>

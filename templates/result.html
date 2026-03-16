@@ -107,9 +107,29 @@
     </div>
     {% endif %}
 
+    <!-- Follow-up questions for weak answers -->
+    {% if followups %}
+    <div class="card followup-section">
+        <h3>🎯 Follow-up Challenges</h3>
+        <p class="followup-intro">These questions target your weakest answers. Practice them to improve your score.</p>
+        {% for fu in followups %}
+        <div class="followup-card">
+            <span class="followup-label">Q{{ fu.question_index + 1 }} Follow-up &middot; Score was {{ fu.score }}%</span>
+            <p class="followup-question">{{ fu.followup_question }}</p>
+            {% if fu.hint %}
+            <p class="followup-hint">💡 Hint: {{ fu.hint }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <div class="result-actions">
         <a href="{{ url_for('dashboard') }}">
             <button class="btn-primary">Try Another Role</button>
+        </a>
+        <a href="{{ url_for('replay', interview_id=record.id) }}">
+            <button class="btn-outline">📼 Replay Answers</button>
         </a>
         <a href="{{ url_for('history') }}">
             <button class="btn-outline">View History</button>

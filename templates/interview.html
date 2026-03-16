@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ role }} Interview — InterviewAI{% endblock %}
 
+{% if show_editor %}
+{% block head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/theme/dracula.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.17/mode/clike/clike.min.js"></script>
+{% endblock %}
+{% endif %}
+
 {% block content %}
 <div class="container">
 
@@ -21,8 +32,10 @@
     <form method="POST" onsubmit="return prepareSubmit()" data-total="{{ questions|length }}">
         <input type="hidden" name="tab_switches" id="tabSwitches" value="0">
         <input type="hidden" name="paste_counts"    id="pasteCounts"  value="">
-        <input type="hidden" name="gaze_look_away" id="gazeLookAway" value="0">
-        <input type="hidden" name="gaze_no_face"   id="gazeNoFace"   value="0">
+        <input type="hidden" name="gaze_look_away"  id="gazeLookAway"   value="0">
+        <input type="hidden" name="gaze_no_face"   id="gazeNoFace"    value="0">
+        <input type="hidden" name="multi_face_count" id="multiFaceCount" value="0">
+        <input type="hidden" name="audio_alerts"   id="audioAlerts"   value="0">
 
         <!-- Camera toggle -->
         <div class="card camera-card">
@@ -38,6 +51,14 @@
             <video id="video" autoplay muted playsinline
                    style="display:none; border-radius:8px; margin-top:12px; max-width:300px;"></video>
             <div id="gazeStatus" class="gaze-status gaze-ok" style="display:none;">👁 Monitoring active</div>
+            <div class="camera-toggle-row" style="margin-top:10px;">
+                <label class="toggle-label">
+                    <input type="checkbox" id="audioToggle" onchange="toggleAudio()">
+                    <span class="toggle-track"></span>
+                    <span>Enable Audio Monitoring</span>
+                </label>
+                <span class="camera-hint" style="color:var(--ok);">Detects background voices</span>
+            </div>
         </div>
 
         <!-- Tab-switch warning -->
@@ -53,6 +74,12 @@
         <!-- Gaze warning (global) -->
         <div id="gazeWarning" class="alert-warning" style="display:none;"></div>
 
+        <!-- Multi-face warning -->
+        <div id="multiFaceWarning" class="alert-warning" style="display:none;"></div>
+
+        <!-- Audio warning -->
+        <div id="audioWarning" class="alert-warning" style="display:none;"></div>
+
         <!-- Questions -->
         {% for question in questions %}
         <div class="card question-card" id="qcard-{{ loop.index }}">
@@ -62,6 +89,21 @@
             </div>
 
             <div class="answer-area">
+                {% if show_editor %}
+                <div class="editor-toggle-row">
+                    <button type="button" class="editor-mode-btn active" id="txtBtn-{{ loop.index }}"
+                            onclick="setMode({{ loop.index }},'text')">📝 Text</button>
+                    <button type="button" class="editor-mode-btn" id="codeBtn-{{ loop.index }}"
+                            onclick="setMode({{ loop.index }},'code')">💻 Code</button>
+                    <select id="langSel-{{ loop.index }}" class="lang-select" style="display:none;"
+                            onchange="changeLang({{ loop.index }},this.value)">
+                        <option value="python">Python</option>
+                        <option value="javascript">JavaScript</option>
+                        <option value="text/x-csrc">C / C++</option>
+                        <option value="text/x-java">Java</option>
+                    </select>
+                </div>
+                {% endif %}
                 <textarea
                     name="answers"
                     id="answer-{{ loop.index }}"
@@ -69,6 +111,9 @@
                     rows="5"
                     required
                     oninput="updateProgress()"></textarea>
+                {% if show_editor %}
+                <div id="cm-wrapper-{{ loop.index }}" class="cm-wrapper" style="display:none;"></div>
+                {% endif %}
                 <div class="paste-flag" id="paste-warn-{{ loop.index }}" style="display:none;">
                     📋 Paste detected — this answer will be penalised (-10 pts)
                 </div>
@@ -99,17 +144,35 @@
 
 {% block scripts %}
 <script>
-// ── Tab-switch tracking ───────────────────────────────────────
-let tabSwitchCount = 0;
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        tabSwitchCount++;
-        document.getElementById('tabSwitches').value = tabSwitchCount;
-        const warn = document.getElementById('tabWarning');
-        warn.style.display = 'block';
-        warn.textContent = `⚠️ Tab switch detected (${tabSwitchCount}x)! Each switch deducts 5 points.`;
+// ── Right-click & keyboard shortcut blocking ──────────────────
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+    const blocked = (
+        (e.ctrlKey && ['c','v','a','u'].includes(e.key.toLowerCase())) ||
+        e.key === 'F12' || e.key === 'PrintScreen'
+    );
+    if (blocked) {
+        e.preventDefault();
+        showBanner('tabWarning', '🚫 Shortcuts are disabled during the interview.');
     }
 });
+
+// ── Tab-switch + screen-record / fullscreen exit tracking ─────
+let tabSwitchCount = 0;
+function onFocusLost() {
+    tabSwitchCount++;
+    document.getElementById('tabSwitches').value = tabSwitchCount;
+    showBanner('tabWarning', `⚠️ Tab/window switch detected (${tabSwitchCount}×) — each deducts 5 points.`);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) onFocusLost(); });
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) onFocusLost(); });
+
+function showBanner(id, msg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = 'block';
+    el.textContent = msg;
+}
 
 // ── Progress tracking ─────────────────────────────────────────
 const totalQs = parseInt(document.querySelector('form[data-total]').dataset.total, 10);
@@ -207,26 +270,30 @@ function checkGaze() {
             noFaceSeconds++;
             document.getElementById('gazeNoFace').value = noFaceSeconds;
             setGazeStatus('bad', `❌ Face not detected (${noFaceSeconds}s)`);
-            if (!wasLookingAway) {
-                showGazeWarning(`⚠️ Face not in frame for ${noFaceSeconds}s — stay visible or points will be deducted.`);
-            }
+            if (!wasLookingAway)
+                showGazeWarning(`⚠️ Face not in frame for ${noFaceSeconds}s — stay visible.`);
             wasLookingAway = true;
             return;
         }
 
-        // BlazeFace keypoints: 0=rightEye, 1=leftEye, 2=noseTip, 3=mouth, 4=rightEar, 5=leftEar
+        // ── Multiple-face detection ──────────────────────────────
+        if (result.detections.length > 1) {
+            multiFaceCount++;
+            document.getElementById('multiFaceCount').value = multiFaceCount;
+            showBanner('multiFaceWarning',
+                `👥 Multiple faces detected (${multiFaceCount}×) — each event deducts 8 points.`);
+        }
+
+        // ── Head-yaw / gaze check ────────────────────────────────
         const kp = result.detections[0].keypoints;
         const rightEye = kp[0], leftEye = kp[1], nose = kp[2];
-
-        // Head-yaw heuristic: nose should sit at horizontal midpoint of eyes.
-        // Asymmetry ratio > 0.18 ≈ head turned ~20°+
-        const eyeCenterX   = (rightEye.x + leftEye.x) / 2;
-        const eyeWidth     = Math.abs(rightEye.x - leftEye.x);
-        const asymmetry    = eyeWidth > 0 ? Math.abs(nose.x - eyeCenterX) / eyeWidth : 0;
+        const eyeCenterX  = (rightEye.x + leftEye.x) / 2;
+        const eyeWidth    = Math.abs(rightEye.x - leftEye.x);
+        const asymmetry   = eyeWidth > 0 ? Math.abs(nose.x - eyeCenterX) / eyeWidth : 0;
         const isLookingAway = asymmetry > 0.18;
 
         if (isLookingAway) {
-            if (!wasLookingAway) {          // count the transition, not every tick
+            if (!wasLookingAway) {
                 lookAwayCount++;
                 document.getElementById('gazeLookAway').value = lookAwayCount;
                 showGazeWarning(`⚠️ Looking away detected (${lookAwayCount}×) — each event deducts 5 points.`);
@@ -237,8 +304,10 @@ function checkGaze() {
             wasLookingAway = false;
             setGazeStatus('ok', '👁 Gaze monitoring active');
         }
-    } catch (_) { /* silent — detection errors are transient */ }
+    } catch (_) { /* transient detection errors — silent */ }
 }
+
+let multiFaceCount = 0;
 
 function setGazeStatus(state, text) {
     const el = document.getElementById('gazeStatus');
@@ -313,6 +382,91 @@ function toggleSpeech(qIndex) {
     recognition.start();
 }
 
+// ── Audio monitoring (Web Audio API) ─────────────────────────
+let audioContext = null, audioStream = null, audioInterval = null;
+let audioAlertCount = 0;
+
+async function toggleAudio() {
+    const toggle = document.getElementById('audioToggle');
+    if (toggle.checked) {
+        try {
+            audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioContext = new AudioContext();
+            const source   = audioContext.createMediaStreamSource(audioStream);
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            const buf = new Uint8Array(analyser.frequencyBinCount);
+            audioInterval = setInterval(() => {
+                analyser.getByteFrequencyData(buf);
+                const avg = buf.reduce((a, b) => a + b, 0) / buf.length;
+                if (avg > 28) {           // sustained background sound threshold
+                    audioAlertCount++;
+                    document.getElementById('audioAlerts').value = audioAlertCount;
+                    showBanner('audioWarning',
+                        `🎙 Background audio detected (${audioAlertCount}×) — each alert deducts 3 points.`);
+                }
+            }, 3000);
+        } catch (_) {
+            toggle.checked = false;
+            alert('Microphone access denied.');
+        }
+    } else {
+        if (audioInterval) { clearInterval(audioInterval); audioInterval = null; }
+        if (audioStream)  { audioStream.getTracks().forEach(t => t.stop()); audioStream = null; }
+        if (audioContext) { audioContext.close(); audioContext = null; }
+    }
+}
+
+// ── Code editor (CodeMirror) ───────────────────────────────────
+{% if show_editor %}
+const cmEditors = {};   // index → CodeMirror instance
+
+function setMode(idx, mode) {
+    const ta       = document.getElementById(`answer-${idx}`);
+    const wrapper  = document.getElementById(`cm-wrapper-${idx}`);
+    const txtBtn   = document.getElementById(`txtBtn-${idx}`);
+    const codeBtn  = document.getElementById(`codeBtn-${idx}`);
+    const langSel  = document.getElementById(`langSel-${idx}`);
+
+    if (mode === 'code') {
+        if (!cmEditors[idx]) {
+            const cm = CodeMirror(wrapper, {
+                value: ta.value,
+                mode: 'python',
+                theme: 'dracula',
+                lineNumbers: true,
+                indentUnit: 4,
+                tabSize: 4,
+                indentWithTabs: false,
+                lineWrapping: true,
+            });
+            cm.on('change', () => { ta.value = cm.getValue(); updateProgress(); });
+            cmEditors[idx] = cm;
+        } else {
+            cmEditors[idx].setValue(ta.value);
+        }
+        ta.style.display      = 'none';
+        wrapper.style.display = 'block';
+        langSel.style.display = 'inline-block';
+        txtBtn.classList.remove('active');
+        codeBtn.classList.add('active');
+    } else {
+        if (cmEditors[idx]) ta.value = cmEditors[idx].getValue();
+        ta.style.display      = 'block';
+        wrapper.style.display = 'none';
+        langSel.style.display = 'none';
+        txtBtn.classList.add('active');
+        codeBtn.classList.remove('active');
+        updateProgress();
+    }
+}
+
+function changeLang(idx, lang) {
+    if (cmEditors[idx]) cmEditors[idx].setOption('mode', lang);
+}
+{% endif %}
+
 // ── Paste detection ───────────────────────────────────────────
 const pasteCount = new Array(totalQs).fill(0);
 
@@ -331,12 +485,25 @@ document.querySelectorAll('textarea[name="answers"]').forEach((ta, i) => {
 
 // ── Form submit prep ──────────────────────────────────────────
 function prepareSubmit() {
-    document.getElementById('tabSwitches').value  = tabSwitchCount;
-    document.getElementById('pasteCounts').value  = pasteCount.join(',');
-    document.getElementById('gazeLookAway').value = lookAwayCount;
-    document.getElementById('gazeNoFace').value   = noFaceSeconds;
+    document.getElementById('tabSwitches').value   = tabSwitchCount;
+    document.getElementById('pasteCounts').value   = pasteCount.join(',');
+    document.getElementById('gazeLookAway').value  = lookAwayCount;
+    document.getElementById('gazeNoFace').value    = noFaceSeconds;
+    document.getElementById('multiFaceCount').value = multiFaceCount;
+    document.getElementById('audioAlerts').value   = audioAlertCount;
+
+    // Sync any active CodeMirror editors back to textareas
+    {% if show_editor %}
+    Object.entries(cmEditors).forEach(([idx, cm]) => {
+        const ta = document.getElementById(`answer-${idx}`);
+        if (ta) ta.value = cm.getValue();
+    });
+    {% endif %}
+
+    // Stop all streams
     stopGazeDetection();
-    // Stop camera stream on submit
+    if (audioInterval) { clearInterval(audioInterval); }
+    if (audioStream)   { audioStream.getTracks().forEach(t => t.stop()); }
     const video = document.getElementById('video');
     if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
     return true;
