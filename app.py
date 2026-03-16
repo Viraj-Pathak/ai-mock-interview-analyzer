@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import datetime
 
@@ -529,6 +530,15 @@ ROLE_ICONS = {
 }
 
 
+# ── Role slug helpers ─────────────────────────────────────────────────────────
+
+def to_slug(role: str) -> str:
+    """'AI/ML Engineer' → 'ai-ml-engineer'"""
+    return re.sub(r'[^a-z0-9]+', '-', role.lower()).strip('-')
+
+ROLE_SLUGS = {to_slug(r): r for r in QUESTIONS}  # slug → display name
+
+
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
 def login_required(f):
@@ -648,13 +658,15 @@ def dashboard():
         icons=ROLE_ICONS,
         levels=LEVELS,
         stats=stats,
+        role_slugs={r: to_slug(r) for r in QUESTIONS},
     )
 
 
-@app.route('/interview/<role>/<level>', methods=['GET', 'POST'])
+@app.route('/interview/<role_slug>/<level>', methods=['GET', 'POST'])
 @login_required
-def interview(role, level):
-    if role not in QUESTIONS or level not in LEVELS:
+def interview(role_slug, level):
+    role = ROLE_SLUGS.get(role_slug)
+    if role is None or level not in LEVELS:
         flash('Invalid role or experience level.', 'error')
         return redirect(url_for('dashboard'))
 

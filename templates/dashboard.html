@@ -50,7 +50,7 @@
                 <p class="level-sub">Pick your experience level:</p>
 
                 {% for key, info in levels.items() %}
-                <a href="{{ url_for('interview', role=role, level=key) }}" class="level-option level-{{ key }}">
+                <a href="{{ url_for('interview', role_slug=role_slugs[role], level=key) }}" class="level-option level-{{ key }}">
                     <span class="level-opt-icon">{{ info.icon }}</span>
                     <span class="level-opt-body">
                         <span class="level-opt-label">{{ info.label }}</span>
