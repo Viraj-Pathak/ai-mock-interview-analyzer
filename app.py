@@ -684,6 +684,14 @@ def interview(role_slug, level):
         # Clamp tab switches to reasonable range
         tab_switches = min(tab_switches, 20)
 
+        # Parse paste detection data
+        paste_counts_str = request.form.get('paste_counts', '')
+        try:
+            paste_counts = [int(x) for x in paste_counts_str.split(',') if x.strip()]
+        except (ValueError, TypeError):
+            paste_counts = []
+        pastes_detected = sum(1 for c in paste_counts if c > 0)
+
         if len(answers) != len(questions):
             flash('Please answer all questions.', 'error')
             return render_template('interview.html', role=role, level=level,
@@ -700,6 +708,7 @@ def interview(role_slug, level):
 
         # Apply cheating penalties
         cheating_penalty = tab_switches * 5
+        cheating_penalty += pastes_detected * 10
         if camera != 'on':
             cheating_penalty += 10
 

@@ -285,6 +285,11 @@ button { cursor: pointer; font-family: inherit; transition: all 0.2s; }
     border-radius: 8px; padding: 10px 16px;
     font-size: 0.88rem; color: var(--ok); margin-bottom: 8px;
 }
+.paste-flag {
+    background: #450a0a; border: 1px solid var(--low);
+    border-radius: 6px; padding: 6px 12px;
+    font-size: 0.82rem; color: var(--low); margin-top: 6px;
+}
 
 .question-card { transition: border-color 0.2s; }
 .question-card:focus-within { border-color: var(--accent); }
@@ -481,6 +486,11 @@ body.light .alert-warning {
     background: #fffbeb;
     border-color: #f59e0b;
     color: #92400e;
+}
+body.light .paste-flag {
+    background: #fff1f2;
+    border-color: #f87171;
+    color: #b91c1c;
 }
 
 body.light .flash-success { background: #f0fdf4; border-color: #4ade80; color: #14532d; }

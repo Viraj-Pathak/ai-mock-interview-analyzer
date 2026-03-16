@@ -20,6 +20,7 @@
 
     <form method="POST" onsubmit="return prepareSubmit()" data-total="{{ questions|length }}">
         <input type="hidden" name="tab_switches" id="tabSwitches" value="0">
+        <input type="hidden" name="paste_counts" id="pasteCounts" value="">
 
         <!-- Camera toggle -->
         <div class="card camera-card">
@@ -41,6 +42,11 @@
             ⚠️ Tab switch detected! Each switch deducts 5 points.
         </div>
 
+        <!-- Paste warning (global) -->
+        <div id="pasteWarning" class="alert-warning" style="display:none;">
+            ⚠️ Copy-paste detected! Pasted answers are penalised.
+        </div>
+
         <!-- Questions -->
         {% for question in questions %}
         <div class="card question-card" id="qcard-{{ loop.index }}">
@@ -57,6 +63,9 @@
                     rows="5"
                     required
                     oninput="updateProgress()"></textarea>
+                <div class="paste-flag" id="paste-warn-{{ loop.index }}" style="display:none;">
+                    📋 Paste detected — this answer will be penalised (-10 pts)
+                </div>
                 <div class="answer-footer">
                     <span class="word-count" id="wc-{{ loop.index }}">0 words</span>
                     <button type="button" class="btn-mic"
@@ -194,9 +203,26 @@ function toggleSpeech(qIndex) {
     recognition.start();
 }
 
+// ── Paste detection ───────────────────────────────────────────
+const pasteCount = new Array(totalQs).fill(0);
+
+document.querySelectorAll('textarea[name="answers"]').forEach((ta, i) => {
+    ta.addEventListener('paste', () => {
+        pasteCount[i]++;
+        // Show per-card flag
+        document.getElementById(`paste-warn-${i + 1}`).style.display = 'block';
+        // Update global banner
+        const affected = pasteCount.filter(c => c > 0).length;
+        const banner = document.getElementById('pasteWarning');
+        banner.style.display = 'block';
+        banner.textContent = `⚠️ Copy-paste detected in ${affected} answer${affected > 1 ? 's' : ''}! Each pasted answer deducts 10 points.`;
+    });
+});
+
 // ── Form submit prep ──────────────────────────────────────────
 function prepareSubmit() {
     document.getElementById('tabSwitches').value = tabSwitchCount;
+    document.getElementById('pasteCounts').value = pasteCount.join(',');
     // Stop camera stream on submit
     const video = document.getElementById('video');
     if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
