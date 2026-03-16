@@ -108,13 +108,17 @@ class ResumeMatch(db.Model):
 with app.app_context():
     try:
         db.create_all()
-        # Add new columns to existing Interview table (safe on Postgres, idempotent)
+    except Exception as e:
+        print(f"DB create_all error: {e}")
+    # Migrate new columns on existing Interview table (separate try so create_all failure
+    # doesn't prevent this, and vice versa)
+    try:
         with db.engine.connect() as _conn:
             _conn.execute(text("ALTER TABLE interview ADD COLUMN IF NOT EXISTS submitted_answers TEXT"))
             _conn.execute(text("ALTER TABLE interview ADD COLUMN IF NOT EXISTS multi_face_count INTEGER DEFAULT 0"))
             _conn.commit()
     except Exception as e:
-        print(f"DB init error: {e}")
+        print(f"DB migration error (non-fatal): {e}")
 
 
 # ── Questions bank (role → level → questions) ─────────────────────────────────
@@ -901,12 +905,15 @@ def dashboard():
     streak = calculate_streak(username)
 
     now = datetime.datetime.now(datetime.timezone.utc)
-    upcoming = ScheduledInterview.query.filter_by(
-        username=username, dismissed=False
-    ).filter(
-        ScheduledInterview.scheduled_at <= now + datetime.timedelta(hours=48),
-        ScheduledInterview.scheduled_at >= now,
-    ).order_by(ScheduledInterview.scheduled_at).all()
+    try:
+        upcoming = ScheduledInterview.query.filter_by(
+            username=username, dismissed=False
+        ).filter(
+            ScheduledInterview.scheduled_at <= now + datetime.timedelta(hours=48),
+            ScheduledInterview.scheduled_at >= now,
+        ).order_by(ScheduledInterview.scheduled_at).all()
+    except Exception:
+        upcoming = []
 
     return render_template(
         'dashboard.html',
@@ -1007,7 +1014,7 @@ def interview(role_slug, level):
                 if fb not in all_feedback:
                     all_feedback.append(fb)
 
-        record = Interview(
+        base_fields = dict(
             username=session['username'],
             role=role,
             level=level,
@@ -1020,11 +1027,21 @@ def interview(role_slug, level):
             filler_count=filler_count,
             feedback=json.dumps(all_feedback),
             per_question=json.dumps(analysis['per_question']),
-            submitted_answers=json.dumps(answers),
-            multi_face_count=multi_face,
         )
-        db.session.add(record)
-        db.session.commit()
+        try:
+            record = Interview(
+                **base_fields,
+                submitted_answers=json.dumps(answers),
+                multi_face_count=multi_face,
+            )
+            db.session.add(record)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            # New columns may not exist yet — save without them
+            record = Interview(**base_fields)
+            db.session.add(record)
+            db.session.commit()
 
         return redirect(url_for('result', interview_id=record.id))
 
@@ -1188,9 +1205,12 @@ def replay(interview_id):
 @app.route('/resume-match', methods=['GET', 'POST'])
 @login_required
 def resume_match():
-    past = ResumeMatch.query.filter_by(
-        username=session['username']
-    ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
+    try:
+        past = ResumeMatch.query.filter_by(
+            username=session['username']
+        ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
+    except Exception:
+        past = []
 
     if request.method == 'POST':
         role_slug = request.form.get('role_slug', '')
@@ -1207,11 +1227,18 @@ def resume_match():
         fname = uploaded.filename.lower()
         try:
             if fname.endswith('.pdf'):
-                import pypdf
-                reader = pypdf.PdfReader(uploaded)
-                resume_text = ' '.join(
-                    page.extract_text() or '' for page in reader.pages
-                )
+                try:
+                    import pypdf
+                    import io as _io
+                    raw = uploaded.read()
+                    reader = pypdf.PdfReader(_io.BytesIO(raw))
+                    resume_text = ' '.join(
+                        page.extract_text() or '' for page in reader.pages
+                    )
+                except ImportError:
+                    flash('PDF support not available. Please upload a .txt file.', 'error')
+                    return render_template('resume_match.html', past=past,
+                                           roles=[(to_slug(r), r) for r in QUESTIONS.keys()])
             else:
                 resume_text = uploaded.read().decode('utf-8', errors='ignore')
         except Exception:
