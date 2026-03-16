@@ -39,6 +39,12 @@ if DATABASE_URL.startswith('postgres://'):
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024   # 2 MB upload limit
+# Reconnect on stale/suspended Neon connections (pool_pre_ping pings before use)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 280,   # recycle before Neon's ~5-min idle suspension
+    'connect_args': {'connect_timeout': 10},
+}
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 # Secure cookies in production (HTTPS)
@@ -902,7 +908,10 @@ def dashboard():
             'last_role': interviews[-1].role,
         }
 
-    streak = calculate_streak(username)
+    try:
+        streak = calculate_streak(username)
+    except Exception:
+        streak = None
 
     now = datetime.datetime.now(datetime.timezone.utc)
     try:
@@ -1291,12 +1300,18 @@ def resume_match():
             matched_kw=json.dumps(matched),
             missing_kw=json.dumps(missing),
         )
-        db.session.add(rm)
-        db.session.commit()
+        try:
+            db.session.add(rm)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
-        past = ResumeMatch.query.filter_by(
-            username=session['username']
-        ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
+        try:
+            past = ResumeMatch.query.filter_by(
+                username=session['username']
+            ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
+        except Exception:
+            past = []
         flash(f'Resume matched against {role} — score: {round(score, 1)}%', 'success')
 
     return render_template('resume_match.html', past=past,
@@ -1350,15 +1365,21 @@ def schedule():
                 flash('Invalid date/time format.', 'error')
         return redirect(url_for('schedule'))
 
-    upcoming = ScheduledInterview.query.filter_by(
-        username=username, dismissed=False
-    ).filter(ScheduledInterview.scheduled_at >= now).order_by(
-        ScheduledInterview.scheduled_at
-    ).all()
+    try:
+        upcoming = ScheduledInterview.query.filter_by(
+            username=username, dismissed=False
+        ).filter(ScheduledInterview.scheduled_at >= now).order_by(
+            ScheduledInterview.scheduled_at
+        ).all()
+    except Exception:
+        upcoming = []
 
-    past_sched = ScheduledInterview.query.filter_by(username=username).filter(
-        ScheduledInterview.scheduled_at < now
-    ).order_by(ScheduledInterview.scheduled_at.desc()).limit(5).all()
+    try:
+        past_sched = ScheduledInterview.query.filter_by(username=username).filter(
+            ScheduledInterview.scheduled_at < now
+        ).order_by(ScheduledInterview.scheduled_at.desc()).limit(5).all()
+    except Exception:
+        past_sched = []
 
     return render_template('schedule.html', upcoming=upcoming, past_sched=past_sched,
                            roles=[(to_slug(r), r) for r in QUESTIONS.keys()],
