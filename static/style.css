@@ -493,6 +493,24 @@ body.light .paste-flag {
     color: #b91c1c;
 }
 
+/* Gaze monitoring status badge */
+.gaze-status {
+    display: inline-block;
+    font-size: 0.80rem;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-top: 10px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+.gaze-ok   { background: rgba(34,197,94,0.15);  color: #4ade80; }
+.gaze-bad  { background: rgba(239,68,68,0.15);  color: var(--low); }
+.gaze-warn { background: rgba(251,191,36,0.15); color: var(--ok); }
+
+body.light .gaze-ok   { background: #f0fdf4; color: #15803d; }
+body.light .gaze-bad  { background: #fff1f2; color: #b91c1c; }
+body.light .gaze-warn { background: #fffbeb; color: #92400e; }
+
 body.light .flash-success { background: #f0fdf4; border-color: #4ade80; color: #14532d; }
 body.light .flash-error   { background: #fef2f2; border-color: #f87171; color: #7f1d1d; }
 body.light .flash-warning  { background: #fffbeb; border-color: #facc15; color: #78350f; }

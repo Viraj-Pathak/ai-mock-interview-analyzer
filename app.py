@@ -692,6 +692,14 @@ def interview(role_slug, level):
             paste_counts = []
         pastes_detected = sum(1 for c in paste_counts if c > 0)
 
+        # Parse gaze-tracking data (collected by MediaPipe in browser)
+        try:
+            gaze_look_away = min(int(request.form.get('gaze_look_away', 0)), 20)
+            gaze_no_face   = min(int(request.form.get('gaze_no_face', 0)), 120)
+        except (ValueError, TypeError):
+            gaze_look_away, gaze_no_face = 0, 0
+        gaze_penalty = gaze_look_away * 5 + (gaze_no_face // 5) * 2
+
         if len(answers) != len(questions):
             flash('Please answer all questions.', 'error')
             return render_template('interview.html', role=role, level=level,
@@ -709,6 +717,7 @@ def interview(role_slug, level):
         # Apply cheating penalties
         cheating_penalty = tab_switches * 5
         cheating_penalty += pastes_detected * 10
+        cheating_penalty += gaze_penalty
         if camera != 'on':
             cheating_penalty += 10
 
