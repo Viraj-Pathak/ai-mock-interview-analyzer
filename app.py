@@ -27,7 +27,7 @@ except Exception:
 from analyzer import analyze_all_answers
 
 # ── App configuration ─────────────────────────────────────────────────────────
-app = Flask(__name__)
+app = Flask(__name__, instance_path='/tmp')
 
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
