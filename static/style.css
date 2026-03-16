@@ -735,4 +735,52 @@ body.light .datetime-input     { background:#f8f9ff; border-color:#dde3f0; color
     .result-actions { flex-direction: column; align-items: center; }
     .flash-container { right: 12px; left: 12px; }
     .flash { max-width: 100%; }
+    .tailor-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Resume Tailoring Guide ──────────────────────────────────────────────── */
+.tailor-result-card  { padding: 24px; }
+.tailor-header       { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.tailor-header-text  { flex: 1; }
+.tailor-header-text h3 { font-size: 1.2rem; font-weight: 700; margin-bottom: 4px; }
+.tailor-assessment   { color: var(--muted); font-size: 0.9rem; margin-bottom: 6px; }
+
+/* Larger ring for the instant result */
+.large-ring          { width: 88px !important; height: 88px !important; flex-shrink: 0; }
+.large-ring span     { font-size: 1rem !important; font-weight: 700; }
+
+.tailor-tip-card     { padding: 20px 22px; margin-bottom: 14px;
+                       border-left: 3px solid var(--border); }
+.tailor-tip-card.priority-high   { border-left-color: var(--low); }
+.tailor-tip-card.priority-medium { border-left-color: var(--ok); }
+.tailor-tip-card.priority-low    { border-left-color: var(--good); }
+
+.tailor-tip-header   { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tailor-tip-icon     { font-size: 1.15rem; }
+.tailor-tip-section  { font-weight: 600; font-size: 0.95rem; flex: 1; }
+
+.tailor-priority-badge          { padding: 2px 9px; border-radius: 10px;
+                                  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; }
+.tailor-priority-badge.priority-high   { background: rgba(248,113,113,0.15); color: var(--low); }
+.tailor-priority-badge.priority-medium { background: rgba(250,204,21,0.12); color: var(--ok); }
+.tailor-priority-badge.priority-low    { background: rgba(74,222,128,0.12); color: var(--good); }
+
+.tailor-tip-advice   { font-size: 0.88rem; color: var(--text); line-height: 1.55; }
+
+.tailor-example      { margin-top: 12px; background: var(--surface2);
+                       border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.tailor-example-label{ font-size: 0.7rem; font-weight: 700; color: var(--accent);
+                       text-transform: uppercase; letter-spacing: 0.06em; display: block;
+                       margin-bottom: 4px; }
+.tailor-example-text { font-size: 0.84rem; color: var(--text); font-style: italic;
+                       line-height: 1.5; }
+.copy-btn            { margin-top: 8px; padding: 4px 14px; border-radius: 6px;
+                       background: transparent; border: 1px solid var(--border);
+                       color: var(--muted); font-size: 0.78rem; cursor: pointer;
+                       transition: all 0.15s; }
+.copy-btn:hover      { border-color: var(--accent); color: var(--accent); }
+
+body.light .tailor-result-card  { background: #fff; }
+body.light .tailor-tip-card     { background: #fff; }
+body.light .tailor-example      { background: #f1f4fb; border-color: #dde3f0; }
+body.light .copy-btn            { border-color: #c9d3e8; color: #64748b; }

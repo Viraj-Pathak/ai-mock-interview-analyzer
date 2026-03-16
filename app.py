@@ -771,6 +771,103 @@ def get_weak_areas(username):
     }
 
 
+def generate_tailoring_tips(role, missing_kw, matched_kw, score):
+    """Return section-by-section resume tailoring suggestions based on keyword gaps."""
+    if score >= 80:
+        assessment = "Strong match! Minor tweaks will push you to the top of the pile."
+    elif score >= 55:
+        assessment = "Good foundation. Adding the missing keywords should noticeably lift your score."
+    else:
+        assessment = "Significant gaps found. Work through each section below to close them."
+
+    # Spread missing keywords across sections
+    skills_kw   = missing_kw[:8]
+    summary_kw  = missing_kw[:3]
+    exp_kw      = missing_kw[3:7] or missing_kw[:4]
+    project_kw  = missing_kw[-4:] or missing_kw[:4]
+    anchor_kw   = matched_kw[:2] if matched_kw else [role.split()[0].lower()]
+
+    tips = []
+
+    if summary_kw:
+        tips.append({
+            'section': 'Professional Summary',
+            'icon': '📝',
+            'priority': 'HIGH' if score < 55 else 'MEDIUM',
+            'advice': (
+                f'Open with a summary that name-drops the role and its core themes. '
+                f'Weave in: {", ".join(summary_kw)}.'
+            ),
+            'example': (
+                f'Results-driven {role} with hands-on experience in '
+                f'{summary_kw[0]}{"," if len(summary_kw) > 1 else ""} '
+                f'{" and ".join(summary_kw[1:3])}. Passionate about building '
+                f'scalable, high-quality solutions.'
+            ),
+        })
+
+    if skills_kw:
+        tips.append({
+            'section': 'Skills / Competencies',
+            'icon': '⚙️',
+            'priority': 'HIGH',
+            'advice': (
+                f'Add a dedicated "Technical Skills" or "Core Competencies" section. '
+                f'Include at minimum: {", ".join(skills_kw)}.'
+            ),
+            'example': 'Technical Skills: ' + ' · '.join(skills_kw),
+        })
+
+    if exp_kw:
+        tips.append({
+            'section': 'Work Experience Bullets',
+            'icon': '💼',
+            'priority': 'HIGH',
+            'advice': (
+                f'Rewrite 2–3 experience bullets to include: {", ".join(exp_kw[:4])}. '
+                f'Lead with a strong action verb and quantify the outcome.'
+            ),
+            'example': (
+                f'• Designed and deployed {exp_kw[0]}-based solution, improving '
+                f'{exp_kw[1] if len(exp_kw) > 1 else "system performance"} by 30% '
+                f'and reducing operational overhead.'
+            ),
+        })
+
+    if score < 70 and project_kw:
+        tips.append({
+            'section': 'Projects',
+            'icon': '🚀',
+            'priority': 'MEDIUM',
+            'advice': (
+                f'Add or expand a project that showcases: {", ".join(project_kw[:3])}. '
+                f'ATS systems rank candidates with concrete project evidence higher.'
+            ),
+            'example': (
+                f'• Built end-to-end {project_kw[0]} pipeline using '
+                f'{" and ".join(anchor_kw)}, demonstrating '
+                f'{project_kw[1] if len(project_kw) > 1 else "key competencies"} '
+                f'in a production-grade setting.'
+            ),
+        })
+
+    if matched_kw:
+        tips.append({
+            'section': 'Strengthen What You Already Have',
+            'icon': '✅',
+            'priority': 'LOW',
+            'advice': (
+                f'You already matched {len(matched_kw)} keywords '
+                f'({", ".join(matched_kw[:4])}{"…" if len(matched_kw) > 4 else ""}). '
+                f'Make sure they appear in both your summary and at least two experience bullets '
+                f'so ATS parsers score them with full weight.'
+            ),
+            'example': '',
+        })
+
+    return {'assessment': assessment, 'tips': tips}
+
+
 def generate_followups(per_question_results, questions, role, level):
     """Generate targeted follow-up questions for answers scoring below 70."""
     followups = []
@@ -1314,7 +1411,13 @@ def resume_match():
             ).order_by(ResumeMatch.created_at.desc()).limit(10).all()
         except Exception:
             past = []
+        tailoring = generate_tailoring_tips(role, missing, matched, score)
         flash(f'Resume matched against {role} — score: {round(score, 1)}%', 'success')
+        return render_template('resume_match.html', past=past,
+                               roles=[(to_slug(r), r) for r in QUESTIONS.keys()],
+                               tailoring=tailoring, match_role=role,
+                               match_score=round(score, 1),
+                               matched=matched, missing=missing)
 
     return render_template('resume_match.html', past=past,
                            roles=[(to_slug(r), r) for r in QUESTIONS.keys()])

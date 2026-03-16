@@ -32,6 +32,56 @@
         </form>
     </div>
 
+    <!-- Immediate result + tailoring guide (shown right after POST) -->
+    {% if tailoring %}
+    <div class="card tailor-result-card" style="margin-top:24px;">
+        <div class="tailor-header">
+            <div class="match-score-ring large-ring" style="--pct:{{ match_score }};">
+                <span>{{ match_score }}%</span>
+            </div>
+            <div class="tailor-header-text">
+                <h3>{{ match_role }}</h3>
+                <p class="tailor-assessment">{{ tailoring.assessment }}</p>
+                {% if matched %}
+                <div class="keyword-chips" style="margin-top:8px;">
+                    <span class="chip-label">Matched:</span>
+                    {% for kw in matched %}<span class="keyword-chip matched">{{ kw }}</span>{% endfor %}
+                </div>
+                {% endif %}
+                {% if missing %}
+                <div class="keyword-chips" style="margin-top:6px;">
+                    <span class="chip-label">Missing:</span>
+                    {% for kw in missing %}<span class="keyword-chip missing">{{ kw }}</span>{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <h3 class="section-title" style="margin-top:28px;">✍️ Resume Tailoring Guide</h3>
+    <p class="sub-text" style="margin-top:-8px;margin-bottom:16px;">
+        Section-by-section suggestions to incorporate missing keywords and beat ATS filters.
+    </p>
+
+    {% for tip in tailoring.tips %}
+    <div class="card tailor-tip-card priority-{{ tip.priority | lower }}">
+        <div class="tailor-tip-header">
+            <span class="tailor-tip-icon">{{ tip.icon }}</span>
+            <span class="tailor-tip-section">{{ tip.section }}</span>
+            <span class="tailor-priority-badge priority-{{ tip.priority | lower }}">{{ tip.priority }}</span>
+        </div>
+        <p class="tailor-tip-advice">{{ tip.advice }}</p>
+        {% if tip.example %}
+        <div class="tailor-example">
+            <span class="tailor-example-label">Example</span>
+            <p class="tailor-example-text" id="ex-{{ loop.index }}">{{ tip.example }}</p>
+            <button class="copy-btn" onclick="copyExample('ex-{{ loop.index }}', this)">Copy</button>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
     <!-- Past results -->
     {% if past %}
     <h3 class="section-title">Past Matches</h3>
@@ -73,6 +123,13 @@
 function showFileName(input) {
     const p = document.getElementById('fileName');
     p.textContent = input.files[0] ? '✅ ' + input.files[0].name : '';
+}
+function copyExample(id, btn) {
+    const text = document.getElementById(id).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 2000);
+    });
 }
 </script>
 {% endblock %}
