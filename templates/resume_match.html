@@ -44,8 +44,6 @@
             <div style="flex:1;">
                 <strong>{{ rm.role }}</strong>
                 <p class="muted-text" style="margin:2px 0;">{{ rm.created_at.strftime('%b %d, %Y') }}</p>
-                {% set matched = rm.matched_kw | tojson | tojson %}
-                {% set missing = rm.missing_kw | tojson | tojson %}
                 {% if rm.matched_kw %}
                 <div class="keyword-chips" style="margin-top:8px;">
                     <span class="chip-label">Matched:</span>

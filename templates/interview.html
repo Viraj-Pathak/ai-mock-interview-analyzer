@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ role }} Interview — InterviewAI{% endblock %}
+{% block title %}{{ role }} Interview — PrepIQ{% endblock %}
 
 {% if show_editor %}
 {% block head %}
@@ -217,12 +217,13 @@ function toggleCamera() {
 }
 
 // ── Gaze / head-pose monitoring (MediaPipe FaceDetector) ──────
-let gazeDetector  = null;
-let gazeReady     = false;
-let gazeInterval  = null;
-let lookAwayCount = 0;
-let noFaceSeconds = 0;
+let gazeDetector   = null;
+let gazeReady      = false;
+let gazeInterval   = null;
+let lookAwayCount  = 0;
+let noFaceSeconds  = 0;
 let wasLookingAway = false;
+let multiFaceCount = 0;   // declared here so checkGaze() can reference it safely
 
 async function initGazeDetection() {
     setGazeStatus('warn', '⏳ Loading gaze AI…');
@@ -306,8 +307,6 @@ function checkGaze() {
         }
     } catch (_) { /* transient detection errors — silent */ }
 }
-
-let multiFaceCount = 0;
 
 function setGazeStatus(state, text) {
     const el = document.getElementById('gazeStatus');

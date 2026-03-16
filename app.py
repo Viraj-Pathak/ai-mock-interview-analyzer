@@ -982,7 +982,8 @@ def interview(role_slug, level):
         if len(answers) != len(questions):
             flash('Please answer all questions.', 'error')
             return render_template('interview.html', role=role, level=level,
-                                   level_info=level_info, questions=questions)
+                                   level_info=level_info, questions=questions,
+                                   show_editor=(role in CODING_ROLES))
 
         # Deep NLP analysis via analyzer.py
         analysis = analyze_all_answers(answers, role, level, questions)
@@ -1004,7 +1005,7 @@ def interview(role_slug, level):
 
         confidence = max(0, confidence - cheating_penalty)
         overall = round(
-            (relevance * 0.45) + (confidence * 0.35) + (clarity * 0.20), 2
+            max(0, min(100, (relevance * 0.45) + (confidence * 0.35) + (clarity * 0.20))), 2
         )
 
         # Aggregate feedback across all questions
@@ -1333,8 +1334,11 @@ def schedule():
             try:
                 scheduled_at = datetime.datetime.fromisoformat(dt_str).replace(
                     tzinfo=datetime.timezone.utc)
+                max_future = now + datetime.timedelta(days=365)
                 if scheduled_at <= now:
                     flash('Scheduled time must be in the future.', 'error')
+                elif scheduled_at > max_future:
+                    flash('Cannot schedule more than 1 year in advance.', 'error')
                 else:
                     db.session.add(ScheduledInterview(
                         username=username, role=role, level=level,
