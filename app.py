@@ -583,6 +583,9 @@ def to_slug(role: str) -> str:
 
 ROLE_SLUGS = {to_slug(r): r for r in QUESTIONS}  # slug → display name
 
+# Placeholder — no hand-written ideal answers; lookups return '' gracefully
+IDEAL_ANSWERS = {}
+
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
 
@@ -913,7 +916,8 @@ def dashboard():
     except Exception:
         streak = None
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    # Use naive UTC so arithmetic with PostgreSQL's naive datetimes works in templates
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     try:
         upcoming = ScheduledInterview.query.filter_by(
             username=username, dismissed=False
@@ -1261,12 +1265,10 @@ def resume_match():
             return render_template('resume_match.html', past=past,
                                    roles=[(to_slug(r), r) for r in QUESTIONS.keys()])
 
-        # Build role corpus from ideal answers
-        role_ideal = IDEAL_ANSWERS.get(role, {})
+        # Build role corpus from the role's interview questions
         corpus_parts = []
-        for lvl_answers in role_ideal.values():
-            for ans in lvl_answers.values():
-                corpus_parts.append(ans)
+        for lvl_q_list in QUESTIONS.get(role, {}).values():
+            corpus_parts.extend(lvl_q_list)
         role_corpus = ' '.join(corpus_parts)
 
         # TF-IDF cosine similarity
@@ -1324,7 +1326,7 @@ def resume_match():
 @login_required
 def schedule():
     username = session['username']
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
 
     if request.method == 'POST':
         action = request.form.get('action', 'create')
@@ -1347,8 +1349,7 @@ def schedule():
             flash('Please fill all required fields.', 'error')
         else:
             try:
-                scheduled_at = datetime.datetime.fromisoformat(dt_str).replace(
-                    tzinfo=datetime.timezone.utc)
+                scheduled_at = datetime.datetime.fromisoformat(dt_str).replace(tzinfo=None)
                 max_future = now + datetime.timedelta(days=365)
                 if scheduled_at <= now:
                     flash('Scheduled time must be in the future.', 'error')
