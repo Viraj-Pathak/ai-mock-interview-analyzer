@@ -553,6 +553,54 @@ QUESTIONS["Bioinformatics Analyst"] = {
     ],
 }
 
+QUESTIONS["Cloud Architect"] = {
+    "fresher": [
+        "What is cloud computing and what are the main service models — IaaS, PaaS, and SaaS?",
+        "What is the difference between horizontal and vertical scaling? Give a cloud example of each.",
+        "Explain the concept of high availability. How would you achieve it in AWS or Azure?",
+        "What is an S3 bucket (or equivalent blob storage)? What are common use cases?",
+        "What is a VPC (Virtual Private Cloud) and why is network isolation important in the cloud?",
+    ],
+    "mid": [
+        "How do you design a multi-region active-active architecture that tolerates a full regional outage?",
+        "Compare AWS Lambda, ECS, and EKS — when would you choose each for a containerised workload?",
+        "Walk me through how you would migrate a monolithic on-premise application to the cloud with minimal downtime.",
+        "How do you implement a zero-trust security model in a cloud environment?",
+        "Explain cloud cost optimisation strategies — how do you right-size resources and reduce waste?",
+    ],
+    "senior": [
+        "Design a globally distributed, fault-tolerant data platform that handles 1 million events per second.",
+        "How do you build a landing-zone framework for a large enterprise adopting multi-cloud across 50+ teams?",
+        "How do you establish FinOps practices and cloud governance at scale without slowing down engineering?",
+        "Walk me through your approach to cloud security compliance (SOC 2, ISO 27001, HIPAA) in a shared-responsibility model.",
+        "How do you evaluate build vs buy vs managed-service decisions for new cloud infrastructure components?",
+    ],
+}
+
+QUESTIONS["Full Stack Developer"] = {
+    "fresher": [
+        "What is the difference between frontend and backend development? How do they communicate in a web app?",
+        "Explain the HTTP request-response cycle — what happens from the moment a user types a URL to when the page loads?",
+        "What is a REST API? What are the key HTTP methods and when do you use each?",
+        "What is the difference between SQL and NoSQL databases? When would you choose one over the other?",
+        "What is version control and how do you use Git in a team workflow (branches, pull requests, merges)?",
+    ],
+    "mid": [
+        "Walk me through how you would architect a full stack feature end-to-end — from database schema to React component.",
+        "How do you handle authentication and authorisation in a full stack app? Compare JWT and session-based auth.",
+        "What is server-side rendering (SSR) vs client-side rendering (CSR)? When does each approach make sense?",
+        "How do you optimise a slow API endpoint — what steps do you take from profiling to fix?",
+        "Explain your approach to writing tests in a full stack project — what do you test on the frontend vs backend?",
+    ],
+    "senior": [
+        "How do you design a full stack system to scale from 10K to 10M users? What changes at each order of magnitude?",
+        "How do you manage state in a large React application — compare Redux, Zustand, React Query, and Context API?",
+        "How do you structure a full stack monorepo — what tooling, sharing strategy, and CI/CD patterns do you use?",
+        "Describe how you would lead a full stack team through a major technology migration (e.g. REST to GraphQL, class components to hooks).",
+        "How do you balance technical debt against feature delivery as a senior full stack engineer?",
+    ],
+}
+
 QUESTIONS["UI/UX Designer"] = {
     "fresher": [
         "What is the difference between UX design and UI design, and how do they complement each other?",
@@ -597,6 +645,8 @@ ROLE_ICONS = {
     "Product Manager":         "🎯",
     "Finance Analyst":         "💰",
     "UI/UX Designer":          "🎨",
+    "Cloud Architect":         "☁️",
+    "Full Stack Developer":    "🌐",
 }
 
 
