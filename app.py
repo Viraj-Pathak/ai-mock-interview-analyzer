@@ -553,6 +553,30 @@ QUESTIONS["Bioinformatics Analyst"] = {
     ],
 }
 
+QUESTIONS["UI/UX Designer"] = {
+    "fresher": [
+        "What is the difference between UX design and UI design, and how do they complement each other?",
+        "What is a wireframe and how does it differ from a prototype? When would you use each?",
+        "Explain user-centred design — what are its core principles and why does it matter?",
+        "What design tools have you used (e.g. Figma, Adobe XD, Sketch)? Walk me through your typical workflow.",
+        "What is a user persona and how do you create one? Why is it important in the design process?",
+    ],
+    "mid": [
+        "Walk me through your end-to-end design process for a new product feature, from research to handoff.",
+        "How do you conduct usability testing? What metrics do you track to measure design success?",
+        "What is a design system and how have you built or contributed to one? How do you keep it consistent across teams?",
+        "How do you handle conflicting feedback from stakeholders, engineers, and user research? Give a real example.",
+        "Explain the difference between qualitative and quantitative UX research. When do you choose one over the other?",
+    ],
+    "senior": [
+        "How do you build and scale a design system to serve multiple product teams with different velocities?",
+        "How do you measure and communicate the ROI of UX improvements to product and business leadership?",
+        "Describe a complex product redesign you led — how did you manage scope, stakeholder alignment, and risk?",
+        "How do you foster a design-thinking culture inside an engineering-driven organisation?",
+        "How do you balance WCAG accessibility requirements with business constraints and visual design ambitions?",
+    ],
+}
+
 ROLE_ICONS = {
     "Software Engineer":       "💻",
     "Frontend Developer":      "🖥️",
@@ -572,6 +596,7 @@ ROLE_ICONS = {
     "Bioinformatics Analyst":  "🧬",
     "Product Manager":         "🎯",
     "Finance Analyst":         "💰",
+    "UI/UX Designer":          "🎨",
 }
 
 
